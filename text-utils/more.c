@@ -43,31 +43,36 @@
  *	modified mem allocation handling for util-linux
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>		/* for alloca() */
-#include <stdarg.h>		/* for va_start() etc */
-#include <sys/param.h>
+/* system includes */
 #include <ctype.h>
-#include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <termios.h>
-#include <setjmp.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-#include <sys/wait.h>
-
-#include "strutils.h"
-#include "nls.h"
-#include "xalloc.h"
-#include "widechar.h"
-#include "closestream.h"
-
 #include <regex.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdarg.h>		/* for va_start() etc */
+#include <stdio.h>
+#include <stdlib.h>		/* for alloca() */
+#include <string.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <unistd.h>
 
+#include <term.h>		/* include after <.*curses.h> */
+
+/* util-linux includes */
+#include "c.h"
+#include "closestream.h"
+#include "nls.h"
+#include "strutils.h"
+#include "widechar.h"
+#include "xalloc.h"
+
+/* definitions */
 #ifdef TEST_PROGRAM
 # define NON_INTERACTIVE_MORE 1
 #endif
@@ -87,7 +92,14 @@
 #define putserr(s)	fputs(s, stderr)
 #define putsout(s)	fputs(s, stdout)
 
-#define stty(fd,argp)  tcsetattr(fd,TCSANOW,argp)
+#define stty(fd,argp)	tcsetattr(fd,TCSANOW,argp)
+#define ringbell()	putcerr('\007')
+
+#define ERASEONECOLUMN \
+    if (docrterase) \
+	putserr(BSB); \
+    else \
+	putserr(BS);
 
 #define TBUFSIZ		1024
 #define LINSIZ		256	/* minimal Line buffer size */
@@ -103,7 +115,31 @@
 #define SHELL_LINE	1000
 #define COMMAND_BUF	200
 #define REGERR_BUF	NUM_COLUMNS
+#define STOP		-10
 
+#define TERM_AUTO_RIGHT_MARGIN    "am"
+#define TERM_CEOL                 "xhp"
+#define TERM_CLEAR                "clear"
+#define TERM_CLEAR_TO_LINE_END    "el"
+#define TERM_CLEAR_TO_SCREEN_END  "ed"
+#define TERM_COLS                 "cols"
+#define TERM_CURSOR_ADDRESS       "cup"
+#define TERM_EAT_NEW_LINE         "xenl"
+#define TERM_ENTER_UNDERLINE      "smul"
+#define TERM_EXIT_STANDARD_MODE   "rmso"
+#define TERM_EXIT_UNDERLINE       "rmul"
+#define TERM_HARD_COPY            "hc"
+#define TERM_HOME                 "home"
+#define TERM_LINE_DOWN            "cud1"
+#define TERM_LINES                "lines"
+#define TERM_OVER_STRIKE          "os"
+#define TERM_PAD_CHAR             "pad"
+#define TERM_STANDARD_MODE        "smso"
+#define TERM_STD_MODE_GLITCH      "xmc"
+#define TERM_UNDERLINE_CHAR       "uc"
+#define TERM_UNDERLINE            "ul"
+
+/* global variables*/
 struct termios otty, savetty0;
 long file_pos, file_size;
 int fnum, no_intty, no_tty, slow_tty;
@@ -155,6 +191,9 @@ struct {
 	long chrctr, line;
 } context, screen_start;
 extern char PC;			/* pad character */
+static char *BS = "\b";		/* backspace */
+static char *BSB = "\b \b";	/* two backspaces*/
+static char *CARAT = "^";	/* carat is carat */
 
 static char ch;
 static int lastcmd, lastarg, lastp;
@@ -1663,7 +1702,6 @@ static int command(char *filename, register FILE *f)
 }
 
 /* Print out the contents of the file f, one screenful at a time. */
-#define STOP -10
 static void screen(register FILE *f, register int num_lines)
 {
 	register int c;
