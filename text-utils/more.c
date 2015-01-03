@@ -1403,6 +1403,34 @@ static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filenam
 		execute(ctl, filename, editor, editor, cmdbuf, ctl->fnames[ctl->fnum], (char *)0);
 }
 
+static int skip_backwards(struct more_control *ctl, FILE *f, int nlines)
+{
+	int initline;
+
+	if (nlines == 0)
+		nlines++;
+	putchar('\r');
+	erasep(ctl, 0);
+	putchar('\n');
+	if (ctl->clreol)
+		my_putstring(ctl->eraseln);
+	printf(P_("...back %d page", "...back %d pages", nlines), nlines);
+	if (ctl->clreol)
+		my_putstring(ctl->eraseln);
+	putchar('\n');
+	initline = ctl->Currline - ctl->dlines * (nlines + 1);
+	if (!ctl->noscroll)
+		--initline;
+	if (initline < 0)
+		initline = 0;
+	set_pos_fseek(ctl, f, 0);
+	ctl->Currline = 0;	/* skiplns() will make Currline correct */
+	skiplns(ctl, initline, f);
+	if (!ctl->noscroll)
+		return ctl->dlines + 1;
+	return ctl->dlines;
+}
+
 /* Read a command and do it.  A command consists of an optional integer
  * argument followed by the command character.  Return the number of
  * lines to display in the next screenful.  If there is nothing more to
@@ -1445,46 +1473,13 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case 'b':
 		case ctrl('B'):
-			{
-				int initline;
-
-				if (ctl->no_intty) {
-					fputc('\a', stderr);
-					return -1;
-				}
-
-				if (nlines == 0)
-					nlines++;
-
-				putchar('\r');
-				erasep(ctl, 0);
-				putchar('\n');
-				if (ctl->clreol)
-					my_putstring(ctl->eraseln);
-				printf(P_("...back %d page",
-					"...back %d pages", nlines),
-					nlines);
-				if (ctl->clreol)
-					my_putstring(ctl->eraseln);
-				putchar('\n');
-
-				initline = ctl->Currline - ctl->dlines * (nlines + 1);
-				if (!ctl->noscroll)
-					--initline;
-				if (initline < 0)
-					initline = 0;
-				set_pos_fseek(ctl, f, 0);
-				ctl->Currline = 0;	/* skiplns() will make Currline correct */
-				skiplns(ctl, initline, f);
-				if (!ctl->noscroll) {
-					retval = ctl->dlines + 1;
-					done = 1;
-					break;
-				}
-				retval = ctl->dlines;
-				done = 1;
-				break;
+			if (ctl->no_intty) {
+				fputc('\a', stderr);
+				return -1;
 			}
+			retval = skip_backwards(ctl, f, nlines);
+			done = 1;
+			break;
 		case ' ':
 		case 'z':
 			if (nlines == 0)
