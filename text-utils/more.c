@@ -560,15 +560,12 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 #endif
 		c = more_getc(ctl, f);
 	}
-	if (column >= ctl->Mcol && ctl->Mcol > 0) {
-		if (!ctl->Wrap) {
+	if (column >= ctl->Mcol && ctl->Mcol > 0)
+		if (!ctl->Wrap)
 			*p++ = '\n';
-		}
-	}
 	colflg = column == ctl->Mcol && ctl->fold_opt;
-	if (colflg && ctl->eatnl && ctl->Wrap) {
+	if (colflg && ctl->eatnl && ctl->Wrap)
 		*p++ = '\n';	/* simulate normal wrap */
-	}
 	*length = p - ctl->Line;
 	*p = 0;
 	return column;
@@ -579,9 +576,9 @@ static void erasep(struct more_control *ctl, int col)
 {
 	if (ctl->promptlen == 0)
 		return;
-	if (ctl->hard) {
+	if (ctl->hard)
 		putchar('\n');
-	} else {
+	else {
 		if (col == 0)
 			putchar('\r');
 		if (!ctl->dumb && ctl->eraseln)
@@ -691,9 +688,9 @@ static void prompt(struct more_control *ctl, char *filename)
 		if (ctl->clreol)
 			putp(ctl->eraseln);
 		ctl->promptlen += printf(_("--More--"));
-		if (filename != NULL) {
+		if (filename != NULL)
 			ctl->promptlen += printf(_("(Next file: %s)"), filename);
-		} else if (!ctl->no_intty) {
+		else if (!ctl->no_intty) {
 			ctl->promptlen +=
 			    printf("(%d%%)",
 				   (int)((ctl->file_pos * 100) / ctl->file_size));
@@ -867,9 +864,9 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 		if (ctl->promptlen > maxlen)
 			maxlen = ctl->promptlen;
 		c = readch(ctl);
-		if (c == '\\') {
+		if (c == '\\')
 			slash++;
-		} else if (((cc_t) c == ctl->otty.c_cc[VERASE]) && !slash) {
+		else if (((cc_t) c == ctl->otty.c_cc[VERASE]) && !slash) {
 			if (sp > buf) {
 #ifdef HAVE_WIDECHAR
 				if (MB_CUR_MAX > 1) {
