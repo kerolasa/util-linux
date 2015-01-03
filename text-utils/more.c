@@ -47,6 +47,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <regex.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -1598,7 +1599,7 @@ static int command(struct more_control *ctl, char *filename, register FILE *f)
 				if (editor == NULL || *editor == '\0')
 					editor = getenv("EDITOR");
 				if (editor == NULL || *editor == '\0')
-					editor = VI;
+					editor = _PATH_VI;
 
 				p = strrchr(editor, '/');
 				if (p)
@@ -1854,7 +1855,7 @@ static void initterm(struct more_control *ctl)
 
 		}
 		if ((ctl->shell = getenv("SHELL")) == NULL)
-			ctl->shell = "/bin/sh";
+			ctl->shell = _PATH_BSHELL;
 	}
 	ctl->no_intty = tcgetattr(fileno(stdin), &ctl->otty);
 	tcgetattr(fileno(stderr), &ctl->otty);
