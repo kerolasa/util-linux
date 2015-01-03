@@ -46,6 +46,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <regex.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -82,8 +83,6 @@
 #ifndef XTABS
 # define XTABS	TAB3
 #endif
-
-#define VI	"vi"	/* found on the user's path */
 
 #define Fopen(s, m)	(ctl->Currline = 0, ctl->file_pos=0, fopen(s,m))
 #define Ftell(f)	ctl->file_pos
@@ -1578,7 +1577,7 @@ static int command(struct more_control *ctl, char *filename, register FILE *f)
 				if (editor == NULL || *editor == '\0')
 					editor = getenv("EDITOR");
 				if (editor == NULL || *editor == '\0')
-					editor = VI;
+					editor = _PATH_VI;
 
 				p = strrchr(editor, '/');
 				if (p)
@@ -1839,7 +1838,7 @@ static void initterm(struct more_control *ctl)
 
 		}
 		if ((ctl->shell = getenv("SHELL")) == NULL)
-			ctl->shell = "/bin/sh";
+			ctl->shell = _PATH_BSHELL;
 	}
 	ctl->no_intty = tcgetattr(fileno(stdin), &ctl->otty);
 	tcgetattr(fileno(stderr), &ctl->otty);
