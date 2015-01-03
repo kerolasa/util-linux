@@ -1082,7 +1082,10 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 	if (id == 0) {
 		if (!isatty(STDIN_FILENO)) {
 			close(STDIN_FILENO);
-			open("/dev/tty", 0);
+			if (open("/dev/tty", 0) < 0) {
+				fprintf(stderr, _("cannot open %s"), "/dev/tty\n");
+				goto err;
+			}
 		}
 
 		va_start(argp, cmd);
@@ -1125,6 +1128,7 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 		fputs(_("can't fork\n"), stderr);
 	set_tty(ctl);
 	puts("------------------------");
+err:
 	prompt(ctl, filename);
 }
 
