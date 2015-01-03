@@ -601,56 +601,58 @@ static int wouldul(char *s, int n)
 /* Print a buffer of n characters */
 static void prbuf(struct more_control *ctl, char *s, int n)
 {
-	char c;	/* next output character */
-	int state;	/* next output char's UL state */
+	char c;			/* next output character */
+	int state;		/* next output char's UL state */
 
-	while (--n >= 0)
-		if (!ctl->ul_opt)
+	while (--n >= 0) {
+		if (!ctl->ul_opt) {
 			putchar(*s++);
-		else {
-			if (*s == ' ' && ctl->pstate == 0 && ctl->ulglitch
-			    && wouldul(s + 1, n - 1)) {
-				s++;
-				continue;
-			}
-			if ((state = wouldul(s, n)) != 0) {
-				c = (*s == '_') ? s[2] : *s;
-				n -= 2;
-				s += 3;
-			} else
-				c = *s++;
-			if (state != ctl->pstate) {
-				if (c == ' ' && state == 0 && ctl->ulglitch
-				    && wouldul(s, n - 1))
-					state = 1;
-				else
-					my_putstring(state ? ctl->ULenter : ctl->ULexit);
-			}
-			if (c != ' ' || ctl->pstate == 0 || state != 0
-			    || ctl->ulglitch == 0)
-#ifdef HAVE_WIDECHAR
-			{
-				wchar_t wc;
-				size_t mblength;
-				mbstate_t mbstate;
-
-				memset(&mbstate, 0, sizeof mbstate);
-				s--;
-				n++;
-				mblength = xmbrtowc(&wc, s, n, &mbstate);
-				while (mblength--)
-					putchar(*s++);
-				n += mblength;
-			}
-#else
-				putchar(c);
-#endif				/* HAVE_WIDECHAR */
-			if (state && *ctl->chUL) {
-				fputs(ctl->chBS, stdout);
-				my_putstring(ctl->chUL);
-			}
-			ctl->pstate = state;
+			continue;
 		}
+		if (*s == ' ' && ctl->pstate == 0 && ctl->ulglitch
+		    && wouldul(s + 1, n - 1)) {
+			s++;
+			continue;
+		}
+		if ((state = wouldul(s, n)) != 0) {
+			c = (*s == '_') ? s[2] : *s;
+			n -= 2;
+			s += 3;
+		} else
+			c = *s++;
+		if (state != ctl->pstate) {
+			if (c == ' ' && state == 0 && ctl->ulglitch
+			    && wouldul(s, n - 1))
+				state = 1;
+			else
+				my_putstring(state ? ctl->ULenter : ctl->
+					     ULexit);
+		}
+		if (c != ' ' || ctl->pstate == 0 || state != 0
+		    || ctl->ulglitch == 0)
+#ifdef HAVE_WIDECHAR
+		{
+			wchar_t wc;
+			size_t mblength;
+			mbstate_t mbstate;
+
+			memset(&mbstate, 0, sizeof mbstate);
+			s--;
+			n++;
+			mblength = xmbrtowc(&wc, s, n, &mbstate);
+			while (mblength--)
+				putchar(*s++);
+			n += mblength;
+		}
+#else
+			putchar(c);
+#endif				/* HAVE_WIDECHAR */
+		if (state && *ctl->chUL) {
+			fputs(ctl->chBS, stdout);
+			my_putstring(ctl->chUL);
+		}
+		ctl->pstate = state;
+	}
 }
 
 /* Erase the current line entirely */
