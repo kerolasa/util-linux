@@ -1391,6 +1391,39 @@ static void runtime_usage(void)
 	fputs(	"-------------------------------------------------------------------------------", stdout);
 }
 
+static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filename)
+{
+	char *editor, *p;
+	int n = (ctl->Currline - ctl->dlines <= 0 ? 1 : ctl->Currline - (ctl->dlines + 1) / 2);
+	int split = 0;
+
+	editor = getenv("VISUAL");
+	if (editor == NULL || *editor == '\0')
+		editor = getenv("EDITOR");
+	if (editor == NULL || *editor == '\0')
+		editor = _PATH_VI;
+	p = strrchr(editor, '/');
+	if (p)
+		p++;
+	else
+		p = editor;
+	/* Earlier: call vi +n file.  This also works for emacs.  POSIX:
+	 * call vi -c n file (when editor is vi or ex).  */
+	if (!strcmp(p, "vi") || !strcmp(p, "ex")) {
+		sprintf(cmdbuf, "-c %d", n);
+		split = 1;
+	} else
+		sprintf(cmdbuf, "+%d", n);
+	kill_line(ctl);
+	printf("%s %s %s", editor, cmdbuf, ctl->fnames[ctl->fnum]);
+	if (split) {
+		cmdbuf[2] = 0;
+		execute(ctl, filename, editor, editor,
+			cmdbuf, cmdbuf + 3, ctl->fnames[ctl->fnum], (char *)0);
+	} else
+		execute(ctl, filename, editor, editor, cmdbuf, ctl->fnames[ctl->fnum], (char *)0);
+}
+
 /* Read a command and do it.  A command consists of an optional integer
  * argument followed by the command character.  Return the number of
  * lines to display in the next screenful.  If there is nothing more to
@@ -1600,44 +1633,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case 'v':	/* This case should go right before default */
 			if (!ctl->no_intty) {
-				/* Earlier: call vi +n file. This also
-				 * works for emacs.  POSIX: call vi -c n
-				 * file (when editor is vi or ex). */
-				char *editor, *p;
-				int n = (ctl->Currline - ctl->dlines <= 0 ? 1 :
-					 ctl->Currline - (ctl->dlines + 1) / 2);
-				int split = 0;
-
-				editor = getenv("VISUAL");
-				if (editor == NULL || *editor == '\0')
-					editor = getenv("EDITOR");
-				if (editor == NULL || *editor == '\0')
-					editor = _PATH_VI;
-
-				p = strrchr(editor, '/');
-				if (p)
-					p++;
-				else
-					p = editor;
-				if (!strcmp(p, "vi") || !strcmp(p, "ex")) {
-					sprintf(cmdbuf, "-c %d", n);
-					split = 1;
-				} else {
-					sprintf(cmdbuf, "+%d", n);
-				}
-
-				kill_line(ctl);
-				printf("%s %s %s", editor, cmdbuf,
-				       ctl->fnames[ctl->fnum]);
-				if (split) {
-					cmdbuf[2] = 0;
-					execute(ctl, filename, editor, editor,
-						cmdbuf, cmdbuf + 3,
-						ctl->fnames[ctl->fnum], (char *)0);
-				} else
-					execute(ctl, filename, editor, editor,
-						cmdbuf, ctl->fnames[ctl->fnum],
-						(char *)0);
+				execute_editor(ctl, cmdbuf, filename);
 				break;
 			}
 			/* fall through */
