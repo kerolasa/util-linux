@@ -741,7 +741,7 @@ static void __attribute__((__noreturn__)) end_it(int dummy __attribute__((__unus
 	reset_tty(global_ctl);
 	if (global_ctl->clreol) {
 		putchar('\r');
-		putp(global_ctl->EodClr);
+		puts(global_ctl->EodClr);
 		fflush(stdout);
 	} else if (!global_ctl->clreol && (global_ctl->promptlen > 0)) {
 		kill_line(global_ctl);
@@ -1424,6 +1424,34 @@ static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filenam
 		execute(ctl, filename, editor, editor, cmdbuf, ctl->fnames[ctl->fnum], (char *)0);
 }
 
+static int skip_backwards(struct more_control *ctl, FILE *f, int nlines)
+{
+	int initline;
+
+	if (nlines == 0)
+		nlines++;
+	putchar('\r');
+	erasep(ctl, 0);
+	putchar('\n');
+	if (ctl->clreol)
+		putp(ctl->eraseln);
+	printf(P_("...back %d page", "...back %d pages", nlines), nlines);
+	if (ctl->clreol)
+		putp(ctl->eraseln);
+	putchar('\n');
+	initline = ctl->Currline - ctl->dlines * (nlines + 1);
+	if (!ctl->noscroll)
+		--initline;
+	if (initline < 0)
+		initline = 0;
+	set_pos_fseek(ctl, f, 0);
+	ctl->Currline = 0;	/* skiplns() will make Currline correct */
+	skiplns(ctl, initline, f);
+	if (!ctl->noscroll)
+		return ctl->dlines + 1;
+	return ctl->dlines;
+}
+
 /* Read a command and do it.  A command consists of an optional integer
  * argument followed by the command character.  Return the number of
  * lines to display in the next screenful.  If there is nothing more to
@@ -1466,46 +1494,13 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case 'b':
 		case ctrl('B'):
-			{
-				int initline;
-
-				if (ctl->no_intty) {
-					fputc('\a', stderr);
-					return -1;
-				}
-
-				if (nlines == 0)
-					nlines++;
-
-				putchar('\r');
-				erasep(ctl, 0);
-				putchar('\n');
-				if (ctl->clreol)
-					putp(ctl->eraseln);
-				printf(P_("...back %d page",
-					"...back %d pages", nlines),
-					nlines);
-				if (ctl->clreol)
-					putp(ctl->eraseln);
-				putchar('\n');
-
-				initline = ctl->Currline - ctl->dlines * (nlines + 1);
-				if (!ctl->noscroll)
-					--initline;
-				if (initline < 0)
-					initline = 0;
-				set_pos_fseek(ctl, f, 0);
-				ctl->Currline = 0;	/* skiplns() will make Currline correct */
-				skiplns(ctl, initline, f);
-				if (!ctl->noscroll) {
-					retval = ctl->dlines + 1;
-					done = 1;
-					break;
-				}
-				retval = ctl->dlines;
-				done = 1;
-				break;
+			if (ctl->no_intty) {
+				fputc('\a', stderr);
+				return -1;
 			}
+			retval = skip_backwards(ctl, f, nlines);
+			done = 1;
+			break;
 		case ' ':
 		case 'z':
 			if (nlines == 0)
@@ -1983,7 +1978,7 @@ int main(int argc, char **argv)
 				more_ungetc(&ctl, c, f);
 				if (ctl.noscroll && (c != EOF)) {
 					if (ctl.clreol)
-						putp(ctl.Home);
+						puts(ctl.Home);
 					else
 						doclear(&ctl);
 				}
@@ -2027,7 +2022,7 @@ int main(int argc, char **argv)
 				if ((ctl.noscroll || clearit)
 				    && (ctl.file_size != LONG_MAX)) {
 					if (ctl.clreol)
-						putp(ctl.Home);
+						puts(ctl.Home);
 					else
 						doclear(&ctl);
 				}
@@ -2035,16 +2030,16 @@ int main(int argc, char **argv)
 					if (ctl.bad_so)
 						erasep(&ctl, 0);
 					if (ctl.clreol)
-						putp(ctl.eraseln);
+						puts(ctl.eraseln);
 					fputs("::::::::::::::", stdout);
 					if (ctl.promptlen > 14)
 						erasep(&ctl, 14);
 					putchar('\n');
 					if (ctl.clreol)
-						putp(ctl.eraseln);
+						puts(ctl.eraseln);
 					puts(ctl.fnames[ctl.fnum]);
 					if (ctl.clreol)
-						putp(ctl.eraseln);
+						puts(ctl.eraseln);
 					puts("::::::::::::::");
 					if (left > ctl.Lpp - 4)
 						left = ctl.Lpp - 4;
