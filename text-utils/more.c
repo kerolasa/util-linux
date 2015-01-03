@@ -1431,6 +1431,32 @@ static int skip_backwards(struct more_control *ctl, FILE *f, int nlines)
 	return ctl->dlines;
 }
 
+static int skip_forwards(struct more_control *ctl, FILE *f, int nlines, char comchar)
+{
+	if (nlines == 0)
+		nlines++;
+	if (comchar == 'f')
+		nlines *= ctl->dlines;
+	putchar('\r');
+	erasep(ctl, 0);
+	putchar('\n');
+	if (ctl->clreol)
+		my_putstring(ctl->eraseln);
+	printf(P_("...skipping %d line", "...skipping %d lines", nlines), nlines);
+	if (ctl->clreol)
+		my_putstring(ctl->eraseln);
+	putchar('\n');
+	while (nlines > 0) {
+		int c;
+		while ((c = more_getc(ctl, f)) != '\n')
+			if (c == EOF)
+				return 0;
+		ctl->Currline++;
+		nlines--;
+	}
+	return 1;
+}
+
 /* Read a command and do it.  A command consists of an optional integer
  * argument followed by the command character.  Return the number of
  * lines to display in the next screenful.  If there is nothing more to
@@ -1439,7 +1465,6 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 {
 	int nlines;
 	int retval = 0;
-	int c;
 	char colonch;
 	int done = 0;
 	char comchar, cmdbuf[INIT_BUF];
@@ -1502,34 +1527,10 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		case 's':
 		case 'f':
 		case ctrl('F'):
-			if (nlines == 0)
-				nlines++;
-			if (comchar == 'f')
-				nlines *= ctl->dlines;
-			putchar('\r');
-			erasep(ctl, 0);
-			putchar('\n');
-			if (ctl->clreol)
-				my_putstring(ctl->eraseln);
-			printf(P_("...skipping %d line",
-				"...skipping %d lines", nlines),
-				nlines);
-
-			if (ctl->clreol)
-				my_putstring(ctl->eraseln);
-			putchar('\n');
-
-			while (nlines > 0) {
-				while ((c = more_getc(ctl, f)) != '\n')
-					if (c == EOF) {
-						retval = 0;
-						done++;
-						goto endsw;
-					}
-				ctl->Currline++;
-				nlines--;
-			}
-			retval = ctl->dlines;
+			if (skip_forwards(ctl, f, nlines, comchar))
+				retval = ctl->dlines;
+			else
+				retval = 0;
 			done = 1;
 			break;
 		case '\n':
@@ -1632,7 +1633,6 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		}
 	}
 	putchar('\r');
- endsw:
 	ctl->inwait = 0;
 	ctl->notell = 1;
 	return retval;
