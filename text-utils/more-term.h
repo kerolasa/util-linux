@@ -24,7 +24,7 @@
 
 static inline void my_putstring(char *s)
 {
-	tputs(s, fileno(stdout), putchar);	/* putp(s); */
+	tputs(s, STDOUT_FILENO, putchar);	/* putp(s); */
 }
 
 static inline void my_setupterm(char *term, int fildes, int *errret)
@@ -78,7 +78,7 @@ static inline char *my_tgoto(char *cap, int col, int row)
 
 static inline void my_putstring(char *s)
 {
-	tputs(s, fileno(stdout), putchar);
+	tputs(s, STDOUT_FILENO, putchar);
 }
 
 static inline void my_setupterm(char *term, int fildes
