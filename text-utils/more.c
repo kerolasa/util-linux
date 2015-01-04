@@ -714,7 +714,7 @@ static void reset_tty(struct more_control *ctl)
 	if (ctl->no_tty)
 		return;
 	if (ctl->pstate) {
-		tputs(ctl->ULexit, fileno(stdout), putchar);
+		tputs(ctl->ULexit, STDOUT_FILENO, putchar);
 		fflush(stdout);
 		ctl->pstate = 0;
 	}
@@ -755,7 +755,7 @@ static int readch(struct more_control *ctl)
 	unsigned char c;
 
 	errno = 0;
-	if (read(fileno(stderr), &c, 1) <= 0) {
+	if (read(STDERR_FILENO, &c, 1) <= 0) {
 		if (errno != EINTR)
 			end_it(0);
 		else
@@ -1734,7 +1734,7 @@ static void chgwinsz(int dummy __attribute__((__unused__)))
 	struct winsize win;
 
 	signal(SIGWINCH, SIG_IGN);
-	if (ioctl(fileno(stdout), TIOCGWINSZ, &win) != -1) {
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
 		if (win.ws_row != 0) {
 			global_ctl->Lpp = win.ws_row;
 			global_ctl->nscroll = global_ctl->Lpp / 2 - 1;
@@ -1767,7 +1767,7 @@ static void initterm(struct more_control *ctl)
 #endif
 
 #ifndef NON_INTERACTIVE_MORE
-	ctl->no_tty = tcgetattr(fileno(stdout), &ctl->otty);
+	ctl->no_tty = tcgetattr(STDOUT_FILENO, &ctl->otty);
 #endif
 	if (!ctl->no_tty) {
 		ctl->docrterase = (ctl->otty.c_cc[VERASE] != 255);
@@ -1782,7 +1782,7 @@ static void initterm(struct more_control *ctl)
 			ctl->ul_opt = 0;
 		} else {
 #ifdef TIOCGWINSZ
-			if (ioctl(fileno(stdout), TIOCGWINSZ, &win) < 0) {
+			if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) < 0) {
 #endif
 				ctl->Lpp = tigetnum(TERM_LINES);
 				ctl->Mcol = tigetnum(TERM_COLS);
@@ -1858,8 +1858,8 @@ static void initterm(struct more_control *ctl)
 		if ((ctl->shell = getenv("SHELL")) == NULL)
 			ctl->shell = _PATH_BSHELL;
 	}
-	ctl->no_intty = tcgetattr(fileno(stdin), &ctl->otty);
-	tcgetattr(fileno(stderr), &ctl->otty);
+	ctl->no_intty = tcgetattr(STDIN_FILENO, &ctl->otty);
+	tcgetattr(STDERR_FILENO, &ctl->otty);
 	ctl->savetty0 = ctl->otty;
 	ctl->hardtabs = (ctl->otty.c_oflag & TABDLY) != TAB3;
 	if (!ctl->no_tty) {
