@@ -62,6 +62,9 @@ You may specify \fBrtc1\fP, \fBrtc2\fP, ... here.
 Assume that the hardware clock is set to local time, regardless of the
 contents of the \fIadjtime\fP file.
 .TP
+.B \-\-list\-modes
+List available \-\-mode option arguments.
+.TP
 .BR \-m , " \-\-mode " \fImode
 Go into the given standby state.  Valid values for \fImode\fP are:
 .RS
