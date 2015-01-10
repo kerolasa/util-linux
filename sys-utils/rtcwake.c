@@ -49,7 +49,7 @@
 
 #define RTC_PATH		"/sys/class/rtc/%s/device/power/wakeup"
 #define SYS_POWER_STATE_PATH	"/sys/power/state"
-#define DEFAULT_DEVICE		"/dev/rtc0"
+#define DEFAULT_DEVICE		"rtc0"
 
 enum rtc_modes {	/* manual page --mode option explains these. */
 	STANDBY_MODE = 0,
@@ -137,7 +137,7 @@ static int is_wakeup_enabled(const char *devname)
 	FILE	*f;
 
 	/* strip the '/dev/' from the devname here */
-	snprintf(buf, sizeof buf, RTC_PATH, devname + strlen("/dev/"));
+	snprintf(buf, sizeof buf, RTC_PATH, devname);
 	f = fopen(buf, "r");
 	if (!f) {
 		warn(_("cannot open %s"), buf);
@@ -395,6 +395,25 @@ static int get_mode(const char *optarg)
 	return ERROR_MODE;
 }
 
+static int open_dev_rtc(const char *devname)
+{
+	int fd;
+	char *devpath;
+	size_t len = strlen(devname);
+
+	devpath = xmalloc(sizeof "/dev/" + len);
+	memcpy(devpath, "/dev/", sizeof "/dev/");
+	memcpy(devpath + strlen("/dev/"), devname, len + 1);
+#ifdef O_CLOEXEC
+	fd = open(devpath, O_RDONLY | O_CLOEXEC);
+#else
+	fd = open(devpath, O_RDONLY);
+#endif
+	if (fd < 0)
+		err(EXIT_FAILURE, _("%s: unable to find device"), devpath);
+	free(devpath);
+	return fd;
+}
 
 int main(int argc, char **argv)
 {
@@ -522,28 +541,11 @@ int main(int argc, char **argv)
 		usage(stderr);
 	}
 
-	/* when devname doesn't start with /dev, append it */
-	if (strncmp(devname, "/dev/", strlen("/dev/")) != 0) {
-		char *new_devname;
-
-		new_devname = xmalloc(strlen(devname) + strlen("/dev/") + 1);
-
-		strcpy(new_devname, "/dev/");
-		strcat(new_devname, devname);
-		devname = new_devname;
-	}
+	/* device must exist and (if we'll sleep) be wakeup-enabled */
+	fd = open_dev_rtc(devname);
 
 	if (suspend != ON_MODE && suspend != NO_MODE && !is_wakeup_enabled(devname))
 		errx(EXIT_FAILURE, _("%s not enabled for wakeup events"), devname);
-
-	/* this RTC must exist and (if we'll sleep) be wakeup-enabled */
-#ifdef O_CLOEXEC
-	fd = open(devname, O_RDONLY | O_CLOEXEC);
-#else
-	fd = open(devname, O_RDONLY);
-#endif
-	if (fd < 0)
-		err(EXIT_FAILURE, _("cannot open %s"), devname);
 
 	/* relative or absolute alarm time, normalized to time_t */
 	if (get_basetimes(&ctl, fd) < 0)
