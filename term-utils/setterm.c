@@ -178,20 +178,6 @@ struct setterm_control {
 	    opt_powerdown:1, opt_blength:1, opt_bfreq:1;
 };
 
-/* Command line parsing routines.
- *
- * Note that it is an error for a given option to be invoked more than once.
- */
-
-static int parse_switch(const char *arg, const char *t, const char *f)
-{
-	if (strcmp(arg, t) == 0)
-		return 1;
-	else if (strcmp(arg, f) == 0)
-		return 0;
-	errx(EXIT_FAILURE, _("argument error: %s"), arg);
-}
-
 static int parse_febg_color(const char *arg)
 {
 	int color;
