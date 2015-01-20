@@ -1344,31 +1344,31 @@ notfound:
 
 static void runtime_usage(void)
 {
-	fputs(_("\n"
-		"Most commands optionally preceded by integer argument k.  "
-		"Defaults in brackets.\n"
-		"Star (*) indicates argument becomes new default.\n"), stdout);
-	fputs(	"-------------------------------------------------------------------------------", stdout);
-	fputs(_("<space>                 Display next k lines of text [current screen size]\n"
-		"z                       Display next k lines of text [current screen size]*\n"
-		"<return>                Display next k lines of text [1]*\n"
-		"d or ctrl-D             Scroll k lines [current scroll size, initially 11]*\n"
-		"q or Q or <interrupt>   Exit from more\n"
-		"s                       Skip forward k lines of text [1]\n"
-		"f                       Skip forward k screenfuls of text [1]\n"
-		"b or ctrl-B             Skip backwards k screenfuls of text [1]\n"
-		"'                       Go to place where previous search started\n"
-		"=                       Display current line number\n"
-		"/<regular expression>   Search for kth occurrence of regular expression [1]\n"
-		"n                       Search for kth occurrence of last r.e [1]\n"
-		"!<cmd> or :!<cmd>       Execute <cmd> in a subshell\n"
-		"v                       Start up /usr/bin/vi at current line\n"
-		"ctrl-L                  Redraw screen\n"
-		":n                      Go to kth next file [1]\n"
-		":p                      Go to kth previous file [1]\n"
-		":f                      Display current file name and line number\n"
-		".                       Repeat previous command\n"), stdout);
-	fputs(	"-------------------------------------------------------------------------------", stdout);
+	fputs(  "\n", stdout);
+	fputs(_("Most commands optionally preceded by integer argument k.\n"), stdout);
+	fputs(_("Defaults in brackets.\n"), stdout);
+	fputs(_("Star (*) indicates argument becomes new default.\n"), stdout);
+	fputs(  "-------------------------------------------------------------------------------\n", stdout);
+	fputs(_("<space>                 Display next k lines of text [current screen size]\n"), stdout);
+	fputs(_("z                       Display next k lines of text [current screen size]*\n"), stdout);
+	fputs(_("<return>                Display next k lines of text [1]*\n"), stdout);
+	fputs(_("d or ctrl-D             Scroll k lines [current scroll size, initially 11]*\n"), stdout);
+	fputs(_("q or Q or <interrupt>   Exit from more\n"), stdout);
+	fputs(_("s                       Skip forward k lines of text [1]\n"), stdout);
+	fputs(_("f                       Skip forward k screenfuls of text [1]\n"), stdout);
+	fputs(_("b or ctrl-B             Skip backwards k screenfuls of text [1]\n"), stdout);
+	fputs(_("'                       Go to place where previous search started\n"), stdout);
+	fputs(_("=                       Display current line number\n"), stdout);
+	fputs(_("/<regular expression>   Search for kth occurrence of regular expression [1]\n"), stdout);
+	fputs(_("n                       Search for kth occurrence of last r.e [1]\n"), stdout);
+	fputs(_("!<cmd> or :!<cmd>       Execute <cmd> in a subshell\n"), stdout);
+	fputs(_("v                       Start up /usr/bin/vi at current line\n"), stdout);
+	fputs(_("ctrl-L                  Redraw screen\n"), stdout);
+	fputs(_(":n                      Go to kth next file [1]\n"), stdout);
+	fputs(_(":p                      Go to kth previous file [1]\n"), stdout);
+	fputs(_(":f                      Display current file name and line number\n"), stdout);
+	fputs(_(".                       Repeat previous command\n"), stdout);
+	fputs(  "-------------------------------------------------------------------------------\n", stdout);
 }
 
 static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filename)
