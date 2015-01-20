@@ -1342,6 +1342,18 @@ notfound:
 	}
 }
 
+static char *find_editor(void)
+{
+	char *editor;
+
+	editor = getenv("VISUAL");
+	if (editor == NULL || *editor == '\0')
+		editor = getenv("EDITOR");
+	if (editor == NULL || *editor == '\0')
+		editor = _PATH_VI;
+	return editor;
+}
+
 static void runtime_usage(void)
 {
 	fputs(  "\n", stdout);
@@ -1362,7 +1374,8 @@ static void runtime_usage(void)
 	fputs(_("/<regexp>       search for kth occurrence of regular expression [1]\n"), stdout);
 	fputs(_("n               search for kth occurrence of last regexp [1]\n"), stdout);
 	fputs(_("!<cmd>          execute <cmd> in a subshell\n"), stdout);
-	fputs(_("v               start up /usr/bin/vi at current line\n"), stdout);
+	fprintf(stdout,
+	      _("v               start up %s at current line\n"), find_editor());
 	fputs(_("ctrl-L          redraw screen\n"), stdout);
 	fputs(_(":n              go to kth next file [1]\n"), stdout);
 	fputs(_(":p              go to kth previous file [1]\n"), stdout);
@@ -1377,11 +1390,7 @@ static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filenam
 	int n = (ctl->Currline - ctl->dlines <= 0 ? 1 : ctl->Currline - (ctl->dlines + 1) / 2);
 	int split = 0;
 
-	editor = getenv("VISUAL");
-	if (editor == NULL || *editor == '\0')
-		editor = getenv("EDITOR");
-	if (editor == NULL || *editor == '\0')
-		editor = _PATH_VI;
+	editor = find_editor();
 	p = strrchr(editor, '/');
 	if (p)
 		p++;
