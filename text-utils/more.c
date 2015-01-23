@@ -385,8 +385,8 @@ static void prepare_line_buffer(struct more_control *ctl)
 static int get_line(struct more_control *ctl, FILE *f, int *length)
 {
 	int c;
-	char *p;
-	int column;
+	char *p = ctl->Line;
+	int column = 0;
 	static int colflg;
 
 #ifdef HAVE_WIDECHAR
@@ -405,8 +405,6 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 #endif
 	prepare_line_buffer(ctl);
 
-	p = ctl->Line;
-	column = 0;
 	c = more_getc(ctl, f);
 	if (colflg && c == '\n') {
 		ctl->Currline++;
@@ -762,10 +760,9 @@ static int readch(struct more_control *ctl)
  * which terminates the number. */
 static int number(struct more_control *ctl, char *cmd)
 {
-	int i;
+	int i = 0;
 	char ch;
 
-	i = 0;
 	for (;;) {
 		ch = readch(ctl);
 		if (isdigit(ch))
@@ -846,13 +843,11 @@ static void erase_one_column(struct more_control *ctl)
 
 static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 {
-	char *sp;
+	char *sp = buf;
 	int c;
 	int slash = 0;
-	int maxlen;
+	int maxlen = 0;
 
-	sp = buf;
-	maxlen = 0;
 	while (sp - buf < nmax) {
 		if (ctl->promptlen > maxlen)
 			maxlen = ctl->promptlen;
@@ -970,7 +965,7 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 
 static int expand(struct more_control *ctl, char **outbuf, char *inbuf)
 {
-	char *inpstr;
+	char *inpstr = inbuf;
 	char *outstr;
 	char c;
 	char *temp;
@@ -980,7 +975,6 @@ static int expand(struct more_control *ctl, char **outbuf, char *inbuf)
 	xtra = strlen(ctl->fnames[ctl->fnum]) + strlen(ctl->shell_line) + 1;
 	tempsz = 200 + xtra;
 	temp = xmalloc(tempsz);
-	inpstr = inbuf;
 	outstr = temp;
 	while ((c = *inpstr++) != '\0') {
 		offset = outstr - temp;
@@ -1111,7 +1105,7 @@ static void do_shell(struct more_control *ctl, char *filename)
 {
 	char cmdbuf[COMMAND_BUF];
 	int rc;
-	char *expanded;
+	char *expanded = NULL;
 
 	kill_line(ctl);
 	putchar('!');
@@ -1121,7 +1115,6 @@ static void do_shell(struct more_control *ctl, char *filename)
 		fputs(ctl->shell_line, stdout);
 	else {
 		ttyin(ctl, cmdbuf, sizeof(cmdbuf) - 2, '!');
-		expanded = 0;
 		rc = expand(ctl, &expanded, cmdbuf);
 		if (expanded) {
 			if (strlen(expanded) < sizeof(ctl->shell_line))
@@ -1270,13 +1263,12 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 	long line1 = startline;
 	long line2 = startline;
 	long line3;
-	int lncount;
+	int lncount = 0;
 	int saveln, rc;
 	regex_t re;
 
 	ctl->context.line = saveln = ctl->Currline;
 	ctl->context.chrctr = startline;
-	lncount = 0;
 	if (!buf)
 		goto notfound;
 	if ((rc = regcomp(&re, buf, REG_NOSUB)) != 0) {
