@@ -163,6 +163,7 @@ struct more_control {
 		fold_opt:1,		/* fold long lines */
 		hard_term:1,		/* is this hard copy terminal */
 		hardtabs:1,		/* print spaces instead of '\t' */
+		ignore_case_opt:1,	/* case insensitive pattern search */
 		jumpopt:1,		/* is jumpline defined */
 		no_bell:1,		/* suppress bell */
 		no_intty:1,		/* is input in interactive mode */
@@ -200,6 +201,7 @@ static void __attribute__((__noreturn__)) usage(FILE *out)
 	fputs(_(" -p          do not scroll, clean screen and display text\n"), out);
 	fputs(_(" -s          squeeze multiple blank lines into one\n"), out);
 	fputs(_(" -u          suppress underlining\n"), out);
+	fputs(_(" -i          ignore case when searching\n"), out);
 	fputs(_(" -<number>   the number of lines per screenful\n"), out);
 	fputs(_(" +<number>   display file beginning from line number\n"), out);
 	fputs(_(" +/<string>  display file beginning from search string match\n"), out);
@@ -250,6 +252,9 @@ static void argscan(struct more_control *ctl, char *s)
 			break;
 		case 'u':
 			ctl->ul_opt = 0;
+			break;
+		case 'i':
+			ctl->ignore_case_opt = 1;
 			break;
 		case '-':
 		case ' ':
@@ -1252,13 +1257,16 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 	long line3;
 	int lncount = 0;
 	int saveln, rc;
+	int flags = REG_NOSUB;
 	regex_t re;
 
 	ctl->context.line = saveln = ctl->current_line;
 	ctl->context.nrow = startline;
+	if (ctl->ignore_case_opt)
+		flags |= REG_ICASE;
 	if (!buf)
 		goto notfound;
-	if ((rc = regcomp(&re, buf, REG_NOSUB)) != 0) {
+	if ((rc = regcomp(&re, buf, flags)) != 0) {
 		char s[REGERR_BUF];
 		regerror(rc, &re, s, sizeof s);
 		more_error(ctl, s);
