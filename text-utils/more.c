@@ -216,6 +216,7 @@ static void __attribute__((__noreturn__)) usage(FILE *out)
 	fputs(_(" -u          suppress underlining\n"), out);
 	fputs(_(" -i          ignore case when searching\n"), out);
 	fputs(_(" -<number>   the number of lines per screenful\n"), out);
+	fputs(_(" -n <number> same as -<number>\n"), out);
 	fputs(_(" +<number>   display file beginning from line number\n"), out);
 	fputs(_(" +/<string>  display file beginning from search string match\n"), out);
 	fputs(_(" -V          display version information and exit\n"), out);
@@ -244,6 +245,12 @@ static void argscan(struct more_control *ctl, char *s)
 				seen_num = 1;
 			}
 			ctl->lines_per_screen = ctl->lines_per_screen * 10 + *s - '0';
+			break;
+		case 'n':
+			ctl->num_files--;
+			if (!*++ctl->file_names)
+				errx(EXIT_FAILURE, "%s -- '%c'", _("option requires an argument"), 'n');
+			ctl->lines_per_screen = strtou16_or_err(*ctl->file_names, _("argument error"));
 			break;
 		case 'd':
 			ctl->no_bell = 1;

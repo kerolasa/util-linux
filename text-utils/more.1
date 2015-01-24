@@ -88,10 +88,16 @@ Suppress underlining.
 .B \-i
 Perform pattern matching in searches without regard to case.
 .TP
+.BI \-n " number"
+Specify the
+.b number
+of lines per screenful.  The
+.b number
+argument is a positive decimal integer.  The \-n option shall override any
+values obtained from any other source.
+.TP
 .BI \- number
-The screen size to use, in
-.I number
-of lines.
+Alias of \-n option.
 .TP
 .BI + number
 Start displaying each file at line
