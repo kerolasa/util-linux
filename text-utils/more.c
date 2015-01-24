@@ -319,6 +319,8 @@ static int check_magic(FILE *f, char *fs)
 			printf(_("\n******** %s: Not a text file ********\n\n"),
 			       fs);
 			return 1;
+		default:
+			break;
 		}
 	}
 	fseek(f, 0L, SEEK_SET);	/* rewind() not necessary */
