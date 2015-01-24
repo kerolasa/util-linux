@@ -306,6 +306,8 @@ static int check_magic(FILE *f, char *fs)
 			printf(_("\n******** %s: Not a text file ********\n\n"),
 			       fs);
 			return 1;
+		default:
+			break;
 		}
 	}
 	fseek(f, 0L, SEEK_SET);	/* rewind() not necessary */
@@ -592,6 +594,7 @@ static void erase_prompt(struct more_control *ctl, int col)
 	ctl->promptlen = 0;
 }
 
+#ifdef HAVE_WIDECHAR
 static UL_ASAN_BLACKLIST size_t xmbrtowc(wchar_t *wc, const char *s, size_t n,
 				  mbstate_t *mbstate)
 {
@@ -600,6 +603,7 @@ static UL_ASAN_BLACKLIST size_t xmbrtowc(wchar_t *wc, const char *s, size_t n,
 		return 1;
 	return mblength;
 }
+#endif
 
 static int would_underline(char *s, int n)
 {
