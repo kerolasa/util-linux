@@ -34,7 +34,7 @@
 .\"
 .\" Copyright (c) 1992 Rik Faith (faith@cs.unc.edu)
 .\"
-.TH MORE "1" "February 2014" "util-linux" "User Commands"
+.TH MORE "1" "January 2015" "util-linux" "User Commands"
 .SH NAME
 more \- file perusal filter for crt viewing
 .SH SYNOPSIS
@@ -107,6 +107,13 @@ Start displaying each file at line
 The
 .I string
 to be searched in each file before starting to display it.
+.TP
+.B \-e
+Exit immediately after writing the last line of the last file in the
+argument list.  This is a posix compliancy option that is silently ignored.
+This implementation of the
+.B more
+has always performed immediate exit.
 .SH COMMANDS
 Interactive commands for
 .B more

@@ -276,6 +276,8 @@ static void argscan(struct more_control *ctl, char *s)
 		case 'i':
 			ctl->ignore_case_opt = 1;
 			break;
+		case 'e':
+			break;
 		case '-':
 		case ' ':
 		case '\t':
