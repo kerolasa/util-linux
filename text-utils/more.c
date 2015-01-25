@@ -971,22 +971,25 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 static int command_expansion(struct more_control *ctl, char **outbuf, char *inbuf)
 {
 	char *inpstr = inbuf;
+	char *allocation;
 	char *outstr;
 	char c;
-	char *temp;
 	int changed = 0;
-	int tempsz, xtra, offset;
+	size_t xtra;
+	ptrdiff_t offset;
 
-	xtra = strlen(ctl->fnames[ctl->argv_position]) + strlen(ctl->shell_line) + 1;
-	tempsz = 200 + xtra;
-	temp = xmalloc(tempsz);
-	outstr = temp;
+	if (!strpbrk(inbuf, "%!\\")) {
+		*outbuf = xstrdup(inbuf);
+		return 0;
+	}
+	xtra = strlen(ctl->fnames[ctl->argv_position]) + strlen(ctl->shell_line) + COMMAND_BUF + 1;
+	outstr = allocation = xmalloc(xtra);
 	while ((c = *inpstr++) != '\0') {
-		offset = outstr - temp;
-		if (tempsz - offset - 1 < xtra) {
-			tempsz += 200 + xtra;
-			temp = xrealloc(temp, tempsz);
-			outstr = temp + offset;
+		offset = outstr - allocation;
+		if (xtra - offset - 1 < xtra) {
+			xtra += COMMAND_BUF;
+			allocation = xrealloc(allocation, xtra);
+			outstr = allocation + offset;
 		}
 		switch (c) {
 		case '%':
@@ -1015,7 +1018,7 @@ static int command_expansion(struct more_control *ctl, char **outbuf, char *inbu
 		}
 	}
 	*outstr++ = '\0';
-	*outbuf = temp;
+	*outbuf = allocation;
 	return changed;
 }
 
@@ -1122,8 +1125,8 @@ static void do_shell(struct more_control *ctl, char *filename)
 		ttyin(ctl, cmdbuf, sizeof(cmdbuf) - 2, '!');
 		rc = command_expansion(ctl, &expanded, cmdbuf);
 		if (expanded) {
-			if (strlen(expanded) < sizeof(ctl->shell_line))
-				strcpy(ctl->shell_line, expanded);
+			if (strlen(expanded) < sizeof(ctl->shell_line) - 1)
+				xstrncpy(ctl->shell_line, expanded, sizeof ctl->shell_line);
 			else
 				rc = -1;
 			free(expanded);
