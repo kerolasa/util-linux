@@ -181,7 +181,6 @@ struct more_control {
 		ul_glitch:1,		/* terminal is underlining in glitch mode */
 		ul_opt:1,		/* underline as best we can */
 		underlining:1,		/* is underlining going on */
-		within:1,		/* true if we are within a file, false if we are between files */
 		wrap_margin:1;		/* set if automargins */
 };
 
@@ -791,8 +790,7 @@ static void change_file(struct more_control *ctl, int nskip)
 	if (nskip > 0) {
 		if (ctl->argv_position + nskip > ctl->nfiles - 1)
 			nskip = ctl->nfiles - ctl->argv_position - 1;
-	} else if (ctl->within)
-		ctl->argv_position++;
+	}
 	ctl->argv_position += nskip;
 	if (ctl->argv_position < 0)
 		ctl->argv_position = 0;
@@ -1953,11 +1951,8 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 		}
 		if (ctl->no_tty)
 			copy_file(f);
-		else {
-			ctl->within = 1;
+		else
 			screen(ctl, f, left);
-			ctl->within = 0;
-		}
 	}
 	fflush(stdout);
 	fclose(f);
