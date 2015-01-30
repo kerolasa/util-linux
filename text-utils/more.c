@@ -1803,9 +1803,7 @@ static void initterm(struct more_control *ctl)
 {
 	int ret, tmp;
 	char *term;
-#ifdef TIOCGWINSZ
 	struct winsize win;
-#endif
 
 #ifndef NON_INTERACTIVE_MORE
 	ctl->no_tty = tcgetattr(STDOUT_FILENO, &ctl->output_tty);
@@ -1822,19 +1820,15 @@ static void initterm(struct more_control *ctl)
 			ctl->dumb = 1;
 			ctl->ul_opt = 0;
 		} else {
-#ifdef TIOCGWINSZ
 			if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) < 0) {
-#endif
 				ctl->lines_per_page = tigetnum(TERM_LINES);
 				ctl->num_columns = tigetnum(TERM_COLS);
-#ifdef TIOCGWINSZ
 			} else {
 				if ((ctl->lines_per_page = win.ws_row) == 0)
 					ctl->lines_per_page = tigetnum(TERM_LINES);
 				if ((ctl->num_columns = win.ws_col) == 0)
 					ctl->num_columns = tigetnum(TERM_COLS);
 			}
-#endif
 			if ((ctl->lines_per_page <= 0) || tigetflag(TERM_HARD_COPY)) {
 				ctl->hard_term = 1;
 				ctl->lines_per_page = LINES_PER_PAGE;
