@@ -495,7 +495,7 @@ int main(int argc, char **argv)
 {
 	struct wh_dirlist *ls = NULL;
 	int want = ALL_DIRS;
-	int i, want_resetable = 0;
+	int i, want_resetable = 0, opt_f_missing = 0;
 
 	setlocale(LC_ALL, "");
 	bindtextdomain(PACKAGE, LOCALEDIR);
@@ -540,6 +540,7 @@ int main(int argc, char **argv)
 
 			switch (*arg) {
 			case 'f':
+				opt_f_missing = 0;
 				break;
 			case 'u':
 				uflag = 1;
@@ -551,6 +552,7 @@ int main(int argc, char **argv)
 				free_dirlist(&ls, BIN_DIR);
 				construct_dirlist_from_argv(
 					&ls, &i, argc, argv, BIN_DIR);
+				opt_f_missing = 1;
 				break;
 			case 'M':
 				if (*(arg + 1))
@@ -559,6 +561,7 @@ int main(int argc, char **argv)
 				free_dirlist(&ls, MAN_DIR);
 				construct_dirlist_from_argv(
 					&ls, &i, argc, argv, MAN_DIR);
+				opt_f_missing = 1;
 				break;
 			case 'S':
 				if (*(arg + 1))
@@ -567,6 +570,7 @@ int main(int argc, char **argv)
 				free_dirlist(&ls, SRC_DIR);
 				construct_dirlist_from_argv(
 					&ls, &i, argc, argv, SRC_DIR);
+				opt_f_missing = 1;
 				break;
 			case 'b':
 				if (want_resetable) {
@@ -607,5 +611,7 @@ int main(int argc, char **argv)
 	}
 
 	free_dirlist(&ls, ALL_DIRS);
+	if (opt_f_missing)
+		errx(EXIT_FAILURE, _("option -f missing"));
 	return EXIT_SUCCESS;
 }
