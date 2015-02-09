@@ -43,7 +43,6 @@
 #include "nls.h"
 #include "strutils.h"
 #include "closestream.h"
-#include "timer.h"
 #include "monotonic.h"
 
 static void __attribute__((__noreturn__)) usage(int ex)
@@ -77,9 +76,12 @@ static void __attribute__((__noreturn__)) usage(int ex)
 
 static sig_atomic_t timeout_expired = 0;
 
-static void timeout_handler(int sig __attribute__((__unused__)))
+static void timeout_handler(int sig __attribute__((__unused__)),
+			    siginfo_t *info,
+			    void *context __attribute__((__unused__)))
 {
-	timeout_expired = 1;
+	if (info->si_code == SI_TIMER)
+		timeout_expired = 1;
 }
 
 static int open_file(const char *filename, int *flags)
@@ -111,9 +113,42 @@ static int open_file(const char *filename, int *flags)
 	return fd;
 }
 
+static int setup_timer(timer_t *t_id, struct itimerval *timeout)
+{
+	struct sigaction sig_a;
+	static struct sigevent sig_e = {
+		.sigev_notify = SIGEV_SIGNAL,
+		.sigev_signo = SIGALRM
+	};
+	struct itimerspec val = {
+		.it_value.tv_sec = timeout->it_value.tv_sec,
+		.it_value.tv_nsec = timeout->it_value.tv_usec * 1000,
+		.it_interval.tv_sec = 0,
+		.it_interval.tv_nsec = 0
+	};
+
+	if (sigemptyset(&sig_a.sa_mask))
+		return 1;
+	sig_a.sa_flags = SA_SIGINFO;
+	sig_a.sa_handler = (void (*)(int))timeout_handler;
+	if (sigaction(SIGALRM, &sig_a, 0))
+		return 1;
+	if (timer_create(CLOCK_MONOTONIC, &sig_e, t_id))
+		return 1;
+	if (timer_settime(*t_id, SA_SIGINFO, &val, NULL))
+		return 1;
+	return 0;
+}
+
+static void cancel_timer(timer_t *t_id)
+{
+	timer_delete(*t_id);
+}
+
 int main(int argc, char *argv[])
 {
-	struct itimerval timeout, old_timer;
+	static timer_t t_id;
+	struct itimerval timeout;
 	int have_timeout = 0;
 	int type = LOCK_EX;
 	int block = 0;
@@ -131,7 +166,6 @@ int main(int argc, char *argv[])
 	int conflict_exit_code = 1;
 	char **cmd_argv = NULL, *sh_c_argv[4];
 	const char *filename = NULL;
-	struct sigaction old_sa;
 	enum {
 		OPT_VERBOSE = CHAR_MAX + 1
 	};
@@ -246,7 +280,8 @@ int main(int argc, char *argv[])
 			have_timeout = 0;
 			block = LOCK_NB;
 		} else
-			setup_timer(&timeout, &old_timer, &old_sa, timeout_handler);
+			if (setup_timer(&t_id, &timeout))
+				err(EX_OSERR, _("cannot not setup timer"));
 	}
 
 	if (verbose)
@@ -298,7 +333,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (have_timeout)
-		cancel_timer(&old_timer, &old_sa);
+		cancel_timer(&t_id);
 	if (verbose) {
 		struct timeval delta;
 
