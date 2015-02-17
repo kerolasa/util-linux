@@ -233,6 +233,28 @@ static long old_style_option(int *argc, char **argv, unsigned long *lines)
 	return ret;
 }
 
+static int is_file(const char *filename, const struct stat sb)
+{
+	switch (sb.st_mode & S_IFMT) {
+	case S_IFREG:
+		return 0;
+	case S_IFLNK:
+		{
+			char *resolved_path = NULL;
+			struct stat follow;
+			int ret;
+
+			if (realpath(filename, resolved_path)) {
+				stat(resolved_path, &follow);
+				ret = is_file(resolved_path, follow);
+				free(resolved_path);
+				return ret;
+			}
+		}
+	}
+	return 1;
+}
+
 int main(int argc, char **argv)
 {
 	const char *filename;
@@ -281,6 +303,8 @@ int main(int argc, char **argv)
 
 	if (stat(filename, &old) != 0)
 		err(EXIT_FAILURE, _("stat of %s failed"), filename);
+	if (is_file(filename, old))
+		errx(EXIT_FAILURE, _("%s: is not a file"), filename);
 	if (lines && old.st_size)
 		tailf(filename, lines, &old);
 
