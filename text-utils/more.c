@@ -157,6 +157,7 @@ struct more_control {
 		docrterase:1,		/* is erase previous supported */
 		docrtkill:1,		/* is erase input supported */
 		dumb:1,			/* is terminal type known */
+		graphics_mode:1,	/* is input in middle of Ecma-048 SGR */
 		eatnl:1,		/* is newline ignored after 80 cols */
 		errors:1,		/* is an error reported */
 		first_file:1,		/* is the input file the first in list */
@@ -548,8 +549,21 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 			} else
 #endif	/* HAVE_WIDECHAR */
 			{
-				if (isprint(c))
-					column++;
+				if (isprint(c)) {
+				        if (ctl->graphics_mode && c != 'm')
+				                /* nothing */ ;
+                                        else {
+                                                ctl->graphics_mode = 0;
+					        column++;
+                                        }
+				} else if (c == ESC) {
+					int next = more_getc(ctl, f);
+					if (next == '[') {	/* select graphic rendition, ends to 'm' */
+						ctl->graphics_mode = 1;
+						column--;
+                                        }
+					more_ungetc(ctl, next, f);
+				}
 			}
 		}
 
