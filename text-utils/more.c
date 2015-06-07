@@ -757,6 +757,7 @@ static void reset_tty(struct more_control *ctl)
 static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 {
 	reset_tty(ctl);
+	del_curterm(cur_term);
 	if (ctl->clreol_opt) {
 		putchar('\r');
 		puts(ctl->end_clear);
