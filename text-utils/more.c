@@ -65,6 +65,10 @@
 #include <termios.h>
 #include <unistd.h>
 
+#ifdef HAVE_MAGIC
+# include <magic.h>
+#endif
+
 #include <term.h>		/* include after <.*curses.h> */
 
 /* util-linux includes */
@@ -161,6 +165,9 @@ struct more_control {
 	int lastarg;			/* previous key command argument */
 	int lastcolon;			/* is a colon-prefixed key command */
 	char shell_line[SHELL_LINE];
+#ifdef HAVE_MAGIC
+	magic_t magic;			/* libmagic data load */
+#endif
 	unsigned int
 		bad_so:1,		/* true if overwriting does not turn off standout */
 		catch_susp:1,		/* should SIGTSTP signal be caught */
@@ -295,37 +302,19 @@ static void argscan(struct more_control *ctl, char *s)
 	}
 }
 
-/* check_magic --
- *	check for file magic numbers.  This code would best be shared
- *	with the file(1) program or, perhaps, more should not try to be
- *	so smart. */
-static int check_magic(FILE *f, char *fs)
+#ifdef HAVE_MAGIC
+/* check_magic -- check for file magic numbers. */
+static int check_magic(struct more_control *ctl, FILE *f, char *fs)
 {
-	signed char twobytes[2];
+	const char *mime_encoding = magic_descriptor(ctl->magic, fileno(f));
 
-	/* don't try to look ahead if the input is unseekable */
-	if (fseek(f, 0L, SEEK_SET))
-		return 0;
-
-	if (fread(twobytes, 2, 1, f) == 1) {
-		switch (twobytes[0] + (twobytes[1] << 8)) {
-		case 0407:	/* a.out obj */
-		case 0410:	/* a.out exec */
-		case 0413:	/* a.out demand exec */
-		case 0405:
-		case 0411:
-		case 0177545:
-		case 0x457f:	/* simple ELF detection */
-			printf(_("\n******** %s: Not a text file ********\n\n"),
-			       fs);
-			return 1;
-		default:
-			break;
-		}
+	if (!mime_encoding || !(strcmp("binary", mime_encoding))) {
+		printf(_("\n******** %s: Not a text file ********\n\n"), fs);
+		return 1;
 	}
-	fseek(f, 0L, SEEK_SET);	/* rewind() not necessary */
 	return 0;
 }
+#endif
 
 static void more_fseek(struct more_control *ctl, FILE *stream, long pos)
 {
@@ -364,15 +353,23 @@ static FILE *more_fopen(struct more_control *ctl, char *fs)
 		printf(_("\n*** %s: directory ***\n\n"), fs);
 		return NULL;
 	}
+	if ((stbuf.st_mode & S_IFMT) != S_IFREG) {
+		printf(_("\n*** %s: is not a file ***\n\n"), fs);
+		return NULL;
+	}
 	if ((f = fopen(fs, "r")) == NULL) {
 		fflush(stdout);
 		warn(_("cannot open %s"), fs);
 		return NULL;
 	}
-	if (check_magic(f, fs)) {
+#ifdef HAVE_MAGIC
+	/* libmacig classifies empty file as binary, that is not what is
+	 * wanted here */
+	if (stbuf.st_size && check_magic(ctl, f, fs)) {
 		fclose(f);
 		return NULL;
 	}
+#endif
 	fcntl(fileno(f), F_SETFD, FD_CLOEXEC);
 	c = more_getc(ctl, f);
 	ctl->clearfirst = (c == '\f');
@@ -756,6 +753,9 @@ static void reset_tty(struct more_control *ctl)
 /* Clean up terminal state and exit. Also come here if interrupt signal received */
 static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 {
+#ifdef HAVE_MAGIC
+	magic_close(ctl->magic);
+#endif
 	reset_tty(ctl);
 	del_curterm(cur_term);
 	if (ctl->clreol_opt) {
@@ -1998,6 +1998,10 @@ int main(int argc, char **argv)
 	if (!(strcmp(program_invocation_short_name, "page")))
 		ctl.noscroll_opt = 1;
 
+#ifdef HAVE_MAGIC
+	ctl.magic = magic_open(MAGIC_MIME_ENCODING | MAGIC_SYMLINK);
+	magic_load(ctl.magic, NULL);
+#endif
 	prepare_line_buffer(&ctl);
 
 	ctl.d_scroll_len = ctl.lines_per_page / 2 - 1;
@@ -2076,5 +2080,8 @@ int main(int argc, char **argv)
 	free(initbuf);
 	free(ctl.linebuf);
 	reset_tty(&ctl);
+#ifdef HAVE_MAGIC
+	magic_close(ctl.magic);
+#endif
 	return EXIT_SUCCESS;
 }

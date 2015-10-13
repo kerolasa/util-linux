@@ -1872,6 +1872,18 @@ UL_REQUIRES_HAVE([ul], [ncursesw, tinfo, ncurses], [ncursesw, ncurses or tinfo l
 AM_CONDITIONAL([BUILD_UL], [test "x$build_ul" = xyes])
 
 
+AC_ARG_WITH([libmagic],
+  AS_HELP_STRING([--without-libmagic], [compile without libmagic]),
+  [], [with_libmagic=auto]
+)
+AS_IF([test "x$with_libmagic" = xno], [have_magic=no], [
+  AC_CHECK_LIB([magic], [magic_open], [
+    AC_DEFINE([HAVE_MAGIC], [1], [Define to 1 if you have the libmagic present.])
+    MAGIC_LIBS="-lmagic"
+  ])
+])
+AC_SUBST([MAGIC_LIBS])
+
 AC_ARG_ENABLE([more],
   AS_HELP_STRING([--disable-more], [do not build more]),
   [], [UL_DEFAULT_ENABLE([more], [check])]
