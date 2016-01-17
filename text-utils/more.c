@@ -61,6 +61,7 @@
 #include <sys/param.h>
 #include <sys/signalfd.h>
 #include <sys/stat.h>
+#include <sys/ttydefaults.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -88,10 +89,7 @@
 #define VI	"vi"	/* found on the user's path */
 
 #define LINSIZ		256	/* minimal Line buffer size */
-#define ctrl(letter)	(letter & 077)
-#define RUBOUT		'\177'
 #define ESC		'\033'
-#define QUIT		'\034'
 #define SCROLL_LEN	11
 #define LINES_PER_PAGE	24
 #define NUM_COLUMNS	80
@@ -834,8 +832,8 @@ static void change_file(struct more_control *ctl, int nskip)
 
 static void show(struct more_control *ctl, char c)
 {
-	if ((c < ' ' && c != '\n' && c != ESC) || c == RUBOUT) {
-		c += (c == RUBOUT) ? -0100 : 0100;
+	if ((c < ' ' && c != '\n' && c != ESC) || c == CERASE) {
+		c += (c == CERASE) ? -0100 : 0100;
 		fputs("^", stderr);
 		ctl->promptlen++;
 	}
@@ -936,7 +934,7 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 					sp--;
 				}
 
-				if ((*sp < ' ' && *sp != '\n') || *sp == RUBOUT) {
+				if ((*sp < ' ' && *sp != '\n') || *sp == CERASE) {
 					ctl->promptlen--;
 					erase_one_column(ctl);
 				}
@@ -972,8 +970,8 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 		if (c != '\\')
 			slash = 0;
 		*sp++ = c;
-		if ((c < ' ' && c != '\n' && c != ESC) || c == RUBOUT) {
-			c += (c == RUBOUT) ? -0100 : 0100;
+		if ((c < ' ' && c != '\n' && c != ESC) || c == CERASE) {
+			c += (c == CERASE) ? -0100 : 0100;
 			fputs("^", stderr);
 			ctl->promptlen++;
 		}
@@ -1602,7 +1600,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 				done++;
 			break;
 		case 'b':
-		case ctrl('B'):
+		case CTRL('B'):
 			if (ctl->no_intty) {
 				fputc('\a', stderr);
 				return -1;
@@ -1620,7 +1618,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			done = 1;
 			break;
 		case 'd':
-		case ctrl('D'):
+		case CTRL('D'):
 			if (nlines != 0)
 				ctl->d_scroll_len = nlines;
 			retval = ctl->d_scroll_len;
@@ -1631,7 +1629,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			exit_more(ctl);
 		case 's':
 		case 'f':
-		case ctrl('F'):
+		case CTRL('F'):
 			if (skip_forwards(ctl, f, nlines, comchar))
 				retval = ctl->lines_per_screen;
 			else
