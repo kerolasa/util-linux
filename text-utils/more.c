@@ -151,8 +151,6 @@ struct more_control {
 	char *underlining_char;		/* underline character */
 	char *backspace_char;		/* backspace character */
 	char *go_home;			/* go to screen home position */
-	char *cursorm;			/* cursor move destination */
-	char cursorhome[40];		/* contains cursor movement to home */
 	char *end_clear;		/* clear rest of screen */
 	int num_columns;		/* number of columns */
 	char *previousre;		/* previous search() buf[] item */
@@ -765,11 +763,11 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 	} else if (!ctl->clreol_opt && (ctl->promptlen > 0)) {
 		kill_line(ctl);
 		fflush(stdout);
-	} else
-		fputc('\n', stderr);
+	}
 	free(ctl->previousre);
 	free(ctl->linebuf);
-	_exit(EXIT_SUCCESS);
+	free(ctl->go_home);
+	exit(EXIT_SUCCESS);
 }
 
 static int read_char(struct more_control *ctl)
@@ -1824,6 +1822,7 @@ static void initterm(struct more_control *ctl)
 	int ret;
 	char *term;
 	struct winsize win;
+	const char *cursorm;
 
 #ifndef NON_INTERACTIVE_MORE
 	ctl->no_tty = tcgetattr(STDOUT_FILENO, &ctl->output_tty);
@@ -1901,14 +1900,13 @@ static void initterm(struct more_control *ctl)
 	} else {
 		ctl->ul_glitch = 0;
 	}
-	ctl->go_home = tigetstr(TERM_HOME);
-	if (ctl->go_home == NULL || *ctl->go_home == '\0') {
-		if ((ctl->cursorm = tigetstr(TERM_CURSOR_ADDRESS)) != NULL) {
-			const char *t = tparm(ctl->cursorm, 0, 0);
-			xstrncpy(ctl->cursorhome, t, sizeof(ctl->cursorhome));
-			ctl->go_home = ctl->cursorhome;
-		}
+	cursorm = tigetstr(TERM_HOME);
+	if (cursorm == NULL || cursorm == (char *)-1) {
+		cursorm = tigetstr(TERM_CURSOR_ADDRESS);
+		if (cursorm == NULL || cursorm == (char *)-1)
+			cursorm = tparm(cursorm, 0, 0);
 	}
+	ctl->go_home = xstrdup(cursorm);
 	ctl->end_clear = tigetstr(TERM_CLEAR_TO_SCREEN_END);
 	if ((ctl->backspace_char = tigetstr(TERM_LINE_DOWN)) == NULL)
 		ctl->backspace_char = "\b";
@@ -2081,12 +2079,5 @@ int main(int argc, char **argv)
 		display_file(&ctl, f, initbuf, left);
 		ctl.first_file = 0;
 	}
-	free(ctl.previousre);
-	free(initbuf);
-	free(ctl.linebuf);
-	reset_tty(&ctl);
-#ifdef HAVE_MAGIC
-	magic_close(ctl.magic);
-#endif
-	return EXIT_SUCCESS;
+	exit_more(&ctl);
 }
