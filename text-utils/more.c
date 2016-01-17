@@ -126,8 +126,8 @@
 struct more_control {
 	struct termios output_tty;	/* output terminal */
 	struct termios orig_tty;	/* original terminal settings */
-	long file_pos;			/* file position */
-	long file_size;			/* file size */
+	off_t file_pos;			/* file position */
+	off_t file_size;		/* file size */
 	int argv_position;		/* position in argv[] */
 	int d_scroll_len;		/* number of lines scrolled by 'd' */
 	int lines_per_screen;		/* screen size in lines */
@@ -314,10 +314,10 @@ static int check_magic(struct more_control *ctl, FILE *f, char *fs)
 }
 #endif
 
-static void more_fseek(struct more_control *ctl, FILE *stream, long pos)
+static void more_fseek(struct more_control *ctl, FILE *stream, off_t pos)
 {
 	ctl->file_pos = pos;
-	fseek(stream, pos, 0);
+	fseeko(stream, pos, SEEK_SET);
 }
 
 static int more_getc(struct more_control *ctl, FILE *stream)
@@ -410,7 +410,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 	size_t mbc_pos = 0;		/* Position of the MBC. */
 	int use_mbc_buffer_flag = 0;	/* If 1, mbc has data. */
 	int break_flag = 0;		/* If 1, exit while(). */
-	long file_pos_bak = ctl->file_pos;
+	off_t file_pos_bak = ctl->file_pos;
 
 	memset(&state, 0, sizeof state);
 #endif
@@ -770,12 +770,12 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 	exit(EXIT_SUCCESS);
 }
 
-static int read_char(struct more_control *ctl)
+static cc_t read_char(struct more_control *ctl)
 {
-	unsigned char c;
+	cc_t c = 0;
 
 	errno = 0;
-	if (read(STDERR_FILENO, &c, 1) <= 0) {
+	if (read(STDERR_FILENO, &c, sizeof(char)) <= 0) {
 		if (errno != EINTR)
 			exit_more(ctl);
 		else
@@ -789,13 +789,13 @@ static int read_char(struct more_control *ctl)
 static int read_number(struct more_control *ctl, char *cmd)
 {
 	int i = 0;
-	char ch;
+	cc_t ch;
 
 	for (;;) {
 		ch = read_char(ctl);
 		if (isdigit(ch))
 			i = i * 10 + ch - '0';
-		else if ((cc_t)ch == ctl->output_tty.c_cc[VKILL])
+		else if (ch == ctl->output_tty.c_cc[VKILL])
 			i = 0;
 		else {
 			*cmd = ch;
@@ -857,7 +857,7 @@ static void more_error(struct more_control *ctl, char *message)
 	} else
 		fputs(message, stdout);
 	fflush(stdout);
-	ctl->errors++;
+	ctl->errors = 1;
 }
 
 static void erase_one_column(struct more_control *ctl)
@@ -871,7 +871,7 @@ static void erase_one_column(struct more_control *ctl)
 static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 {
 	char *sp = buf;
-	int c;
+	cc_t c;
 	int slash = 0;
 	int maxlen = 0;
 
@@ -880,8 +880,8 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 			maxlen = ctl->promptlen;
 		c = read_char(ctl);
 		if (c == '\\')
-			slash++;
-		else if (((cc_t) c == ctl->output_tty.c_cc[VERASE]) && !slash) {
+			slash = 1;
+		else if (c == ctl->output_tty.c_cc[VERASE] && !slash) {
 			if (sp > buf) {
 #ifdef HAVE_WIDECHAR
 				if (MB_CUR_MAX > 1) {
@@ -945,7 +945,7 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 				if (!ctl->eraseln)
 					ctl->promptlen = maxlen;
 			}
-		} else if (((cc_t) c == ctl->output_tty.c_cc[VKILL]) && !slash) {
+		} else if (( c == ctl->output_tty.c_cc[VKILL]) && !slash) {
 			if (ctl->hard_term) {
 				show(ctl, c);
 				putchar('\n');
@@ -964,8 +964,8 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 			fflush(stdout);
 			continue;
 		}
-		if (slash && ((cc_t) c == ctl->output_tty.c_cc[VKILL]
-			      || (cc_t) c == ctl->output_tty.c_cc[VERASE])) {
+		if (slash && (c == ctl->output_tty.c_cc[VKILL]
+			      || c == ctl->output_tty.c_cc[VERASE])) {
 			erase_one_column(ctl);
 			sp--;
 		}
@@ -1178,7 +1178,7 @@ static void do_shell(struct more_control *ctl, char *filename)
  * should cause more of the file to be printed. */
 static int colon_command(struct more_control *ctl, char *filename, int cmd, int nlines)
 {
-	char ch;
+	cc_t ch;
 
 	if (cmd == 0)
 		ch = read_char(ctl);
@@ -1190,9 +1190,11 @@ static int colon_command(struct more_control *ctl, char *filename, int cmd, int 
 		kill_line(ctl);
 		if (!ctl->no_intty)
 			ctl->promptlen =
-			    printf(_("\"%s\" line %d"), ctl->file_names[ctl->argv_position], ctl->current_line);
+			    printf(_("\"%s\" line %jd"), ctl->file_names[ctl->argv_position],
+				     (intmax_t) ctl->current_line);
 		else
-			ctl->promptlen = printf(_("[Not a file] line %d"), ctl->current_line);
+			ctl->promptlen = printf(_("[Not a file] line %jd"),
+						  (intmax_t) ctl->current_line);
 		fflush(stdout);
 		return -1;
 	case 'n':
@@ -1294,10 +1296,10 @@ static int stop_search(struct more_control *ctl)
  * the file */
 static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 {
-	long startline = ctl->file_pos;
-	long line1 = startline;
-	long line2 = startline;
-	long line3;
+	off_t startline = ctl->file_pos;
+	off_t line1 = startline;
+	off_t line2 = startline;
+	off_t line3;
 	int lncount = 0;
 	int saveln, rc;
 	int flags = REG_NOSUB;
@@ -1669,7 +1671,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case '=':
 			kill_line(ctl);
-			ctl->promptlen = printf("%d", ctl->current_line);
+			ctl->promptlen = printf("%jd", (intmax_t) ctl->current_line);
 			fflush(stdout);
 			break;
 		case 'n':
@@ -1825,9 +1827,9 @@ static void initterm(struct more_control *ctl)
 	const char *cursorm;
 
 #ifndef NON_INTERACTIVE_MORE
-	ctl->no_tty = tcgetattr(STDOUT_FILENO, &ctl->output_tty);
+	ctl->no_tty = (tcgetattr(STDOUT_FILENO, &ctl->output_tty) != 0);
 #endif
-	ctl->no_intty = tcgetattr(STDIN_FILENO, &ctl->output_tty);
+	ctl->no_intty = (tcgetattr(STDIN_FILENO, &ctl->output_tty) != 0);
 	tcgetattr(STDERR_FILENO, &ctl->output_tty);
 	ctl->orig_tty = ctl->output_tty;
 	ctl->hardtabs = (ctl->output_tty.c_oflag & TABDLY) != TAB3;
