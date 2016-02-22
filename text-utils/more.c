@@ -411,8 +411,6 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 
 	memset(&state, 0, sizeof state);
 #endif
-	prepare_line_buffer(ctl);
-
 	c = more_getc(ctl, f);
 	if (colflg && c == '\n') {
 		ctl->current_line++;
@@ -1250,8 +1248,6 @@ static void read_line(struct more_control *ctl, FILE *f)
 	int c;
 	char *p;
 
-	prepare_line_buffer(ctl);
-
 	p = ctl->linebuf;
 	while ((c = more_getc(ctl, f)) != '\n' && c != EOF
 	       && (size_t)(p - ctl->linebuf) < ctl->linesz - 1)
@@ -1509,6 +1505,7 @@ static void change_window_sz(struct more_control *ctl)
 		if (win.ws_col != 0)
 			ctl->num_columns = win.ws_col;
 	}
+	prepare_line_buffer(ctl);
 }
 #endif				/* SIGWINCH */
 
