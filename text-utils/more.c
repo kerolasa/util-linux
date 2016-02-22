@@ -1105,6 +1105,13 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 		}
 		va_end(argp);
 
+		if (geteuid() != getuid()) {
+			/* in case someone uses more(1) as setuid binary */
+			if (setuid(getuid()) < 0)
+				err(EXIT_FAILURE, _("setuid failed"));
+			if (setgid(getgid()) < 0)
+				err(EXIT_FAILURE, _("setgid failed"));
+		}
 		execvp(cmd, args);
 		fputs(_("exec failed\n"), stderr);
 		exit(EXIT_FAILURE);
