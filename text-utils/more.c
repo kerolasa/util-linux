@@ -599,17 +599,22 @@ static void erase_prompt(struct more_control *ctl, int col)
 {
 	if (ctl->promptlen == 0)
 		return;
-	if (ctl->hard_term)
+	if (col == 0 && ctl->clreol_opt)
+		puts(ctl->eraseln);
+	else if (ctl->hard_term)
 		putchar('\n');
 	else {
 		if (col == 0)
 			putchar('\r');
 		if (!ctl->dumb && ctl->eraseln)
 			putp(ctl->eraseln);
-		else
+		else {
 			printf("%*s", ctl->promptlen - col, "");
+			if (col == 0)
+				putchar('\r');
+		}
 	}
-	ctl->promptlen = 0;
+	ctl->promptlen = col;
 }
 
 #ifdef HAVE_WIDECHAR
@@ -688,20 +693,12 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 	}
 }
 
-/* Erase the current line entirely */
-static void kill_line(struct more_control *ctl)
-{
-	erase_prompt(ctl, 0);
-	if (!ctl->eraseln || ctl->dumb)
-		putchar('\r');
-}
-
 static void output_prompt(struct more_control *ctl, char *filename)
 {
 	if (ctl->clreol_opt)
 		putp(ctl->eraseln);
 	else if (ctl->promptlen > 0)
-		kill_line(ctl);
+		erase_prompt(ctl, 0);
 	if (!ctl->hard_term) {
 		ctl->promptlen = 0;
 		if (ctl->std_enter && ctl->std_exit) {
@@ -757,7 +754,7 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 		puts(ctl->end_clear);
 		fflush(stdout);
 	} else if (!ctl->clreol_opt && (ctl->promptlen > 0)) {
-		kill_line(ctl);
+		erase_prompt(ctl, 0);
 		fflush(stdout);
 	}
 	reset_tty(ctl);
@@ -846,7 +843,7 @@ static void more_error(struct more_control *ctl, char *message)
 	if (ctl->clreol_opt)
 		putp(ctl->eraseln);
 	else
-		kill_line(ctl);
+		erase_prompt(ctl, 0);
 	ctl->promptlen += strlen(message);
 	if (ctl->std_enter && ctl->std_exit) {
 		putp(ctl->std_enter);
@@ -1139,7 +1136,7 @@ static void do_shell(struct more_control *ctl, char *filename)
 	int rc;
 	char *expanded = NULL;
 
-	kill_line(ctl);
+	erase_prompt(ctl, 0);
 	putchar('!');
 	fflush(stdout);
 	ctl->promptlen = 1;
@@ -1160,7 +1157,7 @@ static void do_shell(struct more_control *ctl, char *filename)
 			output_prompt(ctl, filename);
 			return;
 		} else if (rc > 0) {
-			kill_line(ctl);
+			erase_prompt(ctl, 0);
 			ctl->promptlen = printf("!%s", ctl->shell_line);
 		}
 	}
@@ -1184,7 +1181,7 @@ static int colon_command(struct more_control *ctl, char *filename, int cmd, int 
 	ctl->lastcolon = ch;
 	switch (ch) {
 	case 'f':
-		kill_line(ctl);
+		erase_prompt(ctl, 0);
 		if (!ctl->no_intty)
 			ctl->promptlen =
 			    printf(_("\"%s\" line %jd"), ctl->file_names[ctl->argv_position],
@@ -1345,7 +1342,7 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 							clear_tty(ctl);
 					}
 				} else {
-					kill_line(ctl);
+					erase_prompt(ctl, 0);
 					if (ctl->noscroll_opt) {
 						if (ctl->clreol_opt) {
 							putp(ctl->go_home);
@@ -1438,7 +1435,7 @@ static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filenam
 		split = 1;
 	} else
 		sprintf(cmdbuf, "+%d", n);
-	kill_line(ctl);
+	erase_prompt(ctl, 0);
 	printf("%s %s %s", editor, cmdbuf, ctl->file_names[ctl->argv_position]);
 	if (split) {
 		cmdbuf[2] = 0;
@@ -1588,7 +1585,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		ctl->lastcmd = comchar;
 		ctl->lastarg = nlines;
 		if ((cc_t) comchar == ctl->output_tty.c_cc[VERASE]) {
-			kill_line(ctl);
+			erase_prompt(ctl, 0);
 			output_prompt(ctl, filename);
 			continue;
 		}
@@ -1656,7 +1653,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case '\'':
 			if (!ctl->no_intty) {
-				kill_line(ctl);
+				erase_prompt(ctl, 0);
 				fputs(_("\n***Back***\n\n"), stdout);
 				more_fseek(ctl, f, ctl->context.row_num);
 				ctl->current_line = ctl->context.line_num;
@@ -1667,7 +1664,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			fputc('\a', stderr);
 			break;
 		case '=':
-			kill_line(ctl);
+			erase_prompt(ctl, 0);
 			ctl->promptlen = printf("%jd", (intmax_t) ctl->current_line);
 			fflush(stdout);
 			break;
@@ -1682,7 +1679,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			ctl->search_called = 1;
 			if (nlines == 0)
 				nlines++;
-			kill_line(ctl);
+			erase_prompt(ctl, 0);
 			putchar('/');
 			ctl->promptlen = 1;
 			fflush(stdout);
@@ -1717,7 +1714,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			/* fall through */
 		default:
 			if (ctl->no_bell) {
-				kill_line(ctl);
+				erase_prompt(ctl, 0);
 				if (ctl->std_enter && ctl->std_exit) {
 					putp(ctl->std_enter);
 					ctl->promptlen =
