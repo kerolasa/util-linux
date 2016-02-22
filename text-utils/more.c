@@ -861,9 +861,8 @@ static void more_error(struct more_control *ctl, char *message)
 static void erase_one_column(struct more_control *ctl)
 {
 	if (ctl->docrterase)
-		fputs("\b \b", stderr);
-	else
-		fputs("\b", stderr);
+		fputs("\b ", stderr);
+	fputs("\b", stderr);
 }
 
 static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
