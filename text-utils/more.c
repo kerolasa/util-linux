@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 1980 The Regents of the University of California.
  * All rights reserved.
@@ -698,7 +699,7 @@ static void output_prompt(struct more_control *ctl, char *filename)
 		erase_prompt(ctl, 0);
 	if (!ctl->hard_term) {
 		ctl->promptlen = 0;
-		if (ctl->std_enter && ctl->std_exit) {
+		if (ctl->std_enter) {
 			putp(ctl->std_enter);
 			ctl->promptlen += (2 * ctl->stdout_glitch);
 		}
@@ -716,7 +717,7 @@ static void output_prompt(struct more_control *ctl, char *filename)
 			ctl->promptlen +=
 			    printf(_("[Press space to continue, 'q' to quit.]"));
 		}
-		if (ctl->std_enter && ctl->std_exit)
+		if (ctl->std_exit)
 			putp(ctl->std_exit);
 		if (ctl->clreol_opt)
 			putp(ctl->end_clear);
@@ -834,17 +835,13 @@ static void show(struct more_control *ctl, char c)
 
 static void more_error(struct more_control *ctl, char *message)
 {
-	if (ctl->clreol_opt)
-		putp(ctl->eraseln);
-	else
-		erase_prompt(ctl, 0);
+	erase_prompt(ctl, 0);
 	ctl->promptlen += strlen(message);
-	if (ctl->std_enter && ctl->std_exit) {
+	if (ctl->std_enter)
 		putp(ctl->std_enter);
-		putp(message);
+	putp(message);
+	if (ctl->std_exit)
 		putp(ctl->std_exit);
-	} else
-		fputs(message, stdout);
 	fflush(stdout);
 	ctl->errors = 1;
 }
@@ -1707,17 +1704,13 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		default:
 			if (ctl->no_bell) {
 				erase_prompt(ctl, 0);
-				if (ctl->std_enter && ctl->std_exit) {
+				if (ctl->std_enter)
 					putp(ctl->std_enter);
-					ctl->promptlen =
-					    printf(_
-						   ("[Press 'h' for instructions.]"))
-					    + 2 * ctl->stdout_glitch;
+				ctl->promptlen =
+				    printf(_("[Press 'h' for instructions.]")) +
+				    2 * ctl->stdout_glitch;
+				if (ctl->std_exit)
 					putp(ctl->std_exit);
-				} else
-					ctl->promptlen =
-					    printf(_
-						   ("[Press 'h' for instructions.]"));
 				fflush(stdout);
 			} else
 				fputc('\a', stderr);
@@ -1862,8 +1855,8 @@ static void initterm(struct more_control *ctl)
 	ctl->bad_so = tigetflag(TERM_CEOL);
 	ctl->eraseln = tigetstr(TERM_CLEAR_TO_LINE_END);
 	ctl->clear = tigetstr(TERM_CLEAR);
-	ctl->std_enter = tigetstr(TERM_STANDARD_MODE);
-	ctl->std_exit = tigetstr(TERM_EXIT_STANDARD_MODE);
+	if ((ctl->std_enter = tigetstr(TERM_STANDARD_MODE)) != NULL)
+		ctl->std_exit = tigetstr(TERM_EXIT_STANDARD_MODE);
 	if (0 < tigetnum(TERM_STD_MODE_GLITCH))
 		ctl->stdout_glitch = 1;
 	/* Set up for underlining:  some terminals don't need it; others have
