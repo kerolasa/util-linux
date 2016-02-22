@@ -338,8 +338,8 @@ static FILE *more_fopen(struct more_control *ctl, char *fs)
 	FILE *f;
 	int c;
 
+	fflush(NULL);
 	if (stat(fs, &stbuf) == -1) {
-		fflush(stdout);
 		if (ctl->clreol_opt)
 			putp(ctl->eraseln);
 		warn(_("stat of %s failed"), fs);
@@ -354,7 +354,6 @@ static FILE *more_fopen(struct more_control *ctl, char *fs)
 		return NULL;
 	}
 	if ((f = fopen(fs, "r")) == NULL) {
-		fflush(stdout);
 		warn(_("cannot open %s"), fs);
 		return NULL;
 	}
@@ -723,9 +722,9 @@ static void output_prompt(struct more_control *ctl, char *filename)
 			putp(ctl->std_exit);
 		if (ctl->clreol_opt)
 			putp(ctl->end_clear);
-		fflush(stdout);
 	} else
 		fputc('\a', stderr);
+	fflush(NULL);
 }
 
 static void reset_tty(struct more_control *ctl)
@@ -734,9 +733,9 @@ static void reset_tty(struct more_control *ctl)
 		return;
 	if (ctl->underlining) {
 		putp(ctl->underline_exit);
-		fflush(stdout);
 		ctl->underlining = 0;
 	}
+	fflush(NULL);
 	ctl->output_tty.c_lflag |= ICANON | ECHO;
 	ctl->output_tty.c_cc[VMIN] = ctl->orig_tty.c_cc[VMIN];
 	ctl->output_tty.c_cc[VTIME] = ctl->orig_tty.c_cc[VTIME];
@@ -752,11 +751,8 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 	if (ctl->clreol_opt) {
 		putchar('\r');
 		puts(ctl->end_clear);
-		fflush(stdout);
-	} else if (!ctl->clreol_opt && (ctl->promptlen > 0)) {
+	} else if (!ctl->clreol_opt && (ctl->promptlen > 0))
 		erase_prompt(ctl, 0);
-		fflush(stdout);
-	}
 	reset_tty(ctl);
 	del_curterm(cur_term);
 	free(ctl->previousre);
@@ -1060,7 +1056,6 @@ static void quit_more(struct more_control *ctl)
 static void suspend_more(struct more_control *ctl)
 {
 	reset_tty(ctl);
-	fflush(stdout);
 	kill(0, SIGSTOP);
 	/* We're back */
 	set_tty(ctl);
@@ -1080,7 +1075,7 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 	char **args  __attribute__((__cleanup__(free_args))) = NULL;
 	int argcount;
 
-	fflush(stdout);
+	fflush(NULL);
 	for (n = 10; (id = fork()) < 0 && n > 0; n--)
 		sleep(5);
 	if (id == 0) {
@@ -1161,8 +1156,8 @@ static void do_shell(struct more_control *ctl, char *filename)
 			ctl->promptlen = printf("!%s", ctl->shell_line);
 		}
 	}
-	fflush(stdout);
 	fputc('\n', stderr);
+	fflush(NULL);
 	ctl->promptlen = 0;
 	ctl->shellp = 1;
 	execute(ctl, filename, ctl->shell, ctl->shell, "-c", ctl->shell_line, 0);
@@ -1956,7 +1951,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 		else
 			screen(ctl, f, left);
 	}
-	fflush(stdout);
+	fflush(NULL);
 	fclose(f);
 	ctl->screen_start.line_num = ctl->screen_start.row_num = 0L;
 	ctl->context.line_num = ctl->context.row_num = 0L;
