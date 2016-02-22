@@ -605,7 +605,7 @@ static void erase_prompt(struct more_control *ctl, int col)
 		if (col == 0)
 			putchar('\r');
 		if (!ctl->dumb && ctl->eraseln)
-			tputs(ctl->eraseln, STDOUT_FILENO, putchar);
+			putp(ctl->eraseln);
 		else
 			printf("%*s", ctl->promptlen - col, "");
 	}
@@ -736,7 +736,7 @@ static void reset_tty(struct more_control *ctl)
 	if (ctl->no_tty)
 		return;
 	if (ctl->underlining) {
-		tputs(ctl->underline_exit, STDOUT_FILENO, putchar);
+		putp(ctl->underline_exit);
 		fflush(stdout);
 		ctl->underlining = 0;
 	}
@@ -752,8 +752,6 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 #ifdef HAVE_MAGIC
 	magic_close(ctl->magic);
 #endif
-	reset_tty(ctl);
-	del_curterm(cur_term);
 	if (ctl->clreol_opt) {
 		putchar('\r');
 		puts(ctl->end_clear);
@@ -762,6 +760,8 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 		kill_line(ctl);
 		fflush(stdout);
 	}
+	reset_tty(ctl);
+	del_curterm(cur_term);
 	free(ctl->previousre);
 	free(ctl->linebuf);
 	free(ctl->go_home);
