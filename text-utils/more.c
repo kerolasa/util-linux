@@ -1047,15 +1047,16 @@ static void free_args(char ***args)
 static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 {
 	int id;
-	int n;
 	va_list argp;
 	char *arg;
 	char **args  __attribute__((__cleanup__(free_args))) = NULL;
 	int argcount;
 
 	fflush(NULL);
-	for (n = 10; (id = fork()) < 0 && 0 < n; n--)
-		sleep(5);
+	if ((id = fork()) < 0) {
+		warn(_("fork failed"));
+		goto err;
+	}
 	if (id == 0) {
 		if (!isatty(STDIN_FILENO)) {
 			close(STDIN_FILENO);
