@@ -1034,7 +1034,7 @@ static void quit_more(struct more_control *ctl)
 static void suspend_more(struct more_control *ctl)
 {
 	reset_tty(ctl);
-	kill(0, SIGSTOP);
+	kill(getpid(), SIGSTOP);
 	/* We're back */
 	set_tty(ctl);
 }
