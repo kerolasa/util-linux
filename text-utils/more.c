@@ -1364,11 +1364,11 @@ static char *find_editor(void)
 
 static void runtime_usage(void)
 {
-	fputs(  "\n", stdout);
+	const char separator[] = "-------------------------------------------------------------------------------\n";
+	fputs(separator, stdout);
 	fputs(_("Most commands optionally preceded by integer argument k.  "
 		"Defaults in brackets.\n"
 		"Star (*) indicates argument becomes new default.\n"), stdout);
-	fputs(  "-------------------------------------------------------------------------------\n", stdout);
 	fputs(_("<space>         display next k lines of text [current screen size]\n"), stdout);
 	fputs(_("z               display next k lines of text [current screen size]*\n"), stdout);
 	fputs(_("<return>        display next k lines of text [1]*\n"), stdout);
@@ -1389,7 +1389,7 @@ static void runtime_usage(void)
 	fputs(_(":p              go to kth previous file [1]\n"), stdout);
 	fputs(_(":f              display current file name and line number\n"), stdout);
 	fputs(_(".               repeat previous command\n"), stdout);
-	fputs(  "-------------------------------------------------------------------------------\n", stdout);
+	fputs(separator, stdout);
 }
 
 static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filename)
@@ -1676,6 +1676,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case '?':
 		case 'h':
+			erase_line(ctl);
 			if (ctl->noscroll_opt)
 				clear_tty(ctl);
 			runtime_usage();
