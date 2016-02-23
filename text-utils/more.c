@@ -377,7 +377,7 @@ static void prepare_line_buffer(struct more_control *ctl)
 {
 	size_t nsz = ctl->num_columns * 4;
 
-	if (ctl->linesz >= nsz)
+	if (nsz <= ctl->linesz)
 		return;
 
 	if (nsz < LINSIZ)
@@ -417,7 +417,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 	}
 	while (p < &ctl->linebuf[ctl->linesz - 1]) {
 #ifdef HAVE_WIDECHAR
-		if (ctl->fold_opt && use_mbc_buffer_flag && MB_CUR_MAX > 1) {
+		if (ctl->fold_opt && use_mbc_buffer_flag && 1 < MB_CUR_MAX) {
 			use_mbc_buffer_flag = 0;
 			state_bak = state;
 			mbc[mbc_pos++] = c;
@@ -436,11 +436,11 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 				column++;
 				file_pos_bak++;
 
-				if (column >= ctl->num_columns)
+				if (ctl->num_columns <= column)
 					more_fseek(ctl, f, file_pos_bak);
 				else {
 					memmove(mbc, mbc + 1, --mbc_pos);
-					if (mbc_pos > 0) {
+					if (0 < mbc_pos) {
 						mbc[mbc_pos] = '\0';
 						goto process_mbc;
 					}
@@ -449,20 +449,19 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 
 			default:
 				wc_width = wcwidth(wc);
-
-				if (column + wc_width > ctl->num_columns) {
+				if (ctl->num_columns < (column + wc_width)) {
 					more_fseek(ctl, f, file_pos_bak);
 					break_flag = 1;
 				} else {
 					for (i = 0; p < &ctl->linebuf[ctl->linesz - 1] &&
 						    i < mbc_pos; i++)
 						*p++ = mbc[i];
-					if (wc_width > 0)
+					if (0 < wc_width)
 						column += wc_width;
 				}
 			}
 
-			if (break_flag || column >= ctl->num_columns)
+			if (break_flag || ctl->num_columns <= column)
 				break;
 
 			c = more_getc(ctl, f);
@@ -470,7 +469,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 		}
 #endif	/* HAVE_WIDECHAR */
 		if (c == EOF) {
-			if (p > ctl->linebuf) {
+			if (ctl->linebuf < p) {
 				*p = '\0';
 				*length = p - ctl->linebuf;
 				return column;
@@ -496,12 +495,12 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 						if ((++column & 7) == 0)
 							break;
 					}
-					if (column >= ctl->promptlen)
+					if (ctl->promptlen <= column)
 						ctl->promptlen = 0;
 				}
 			} else
 				column = 1 + (column | 7);
-		} else if (c == '\b' && column > 0) {
+		} else if (c == '\b' && 0 < column) {
 			column--;
 		} else if (c == '\r') {
 			int next = more_getc(ctl, f);
@@ -522,7 +521,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 			return column;
 		} else {
 #ifdef HAVE_WIDECHAR
-			if (ctl->fold_opt && MB_CUR_MAX > 1) {
+			if (ctl->fold_opt && 1 < MB_CUR_MAX) {
 				memset(mbc, 0, MB_LEN_MAX);
 				mbc_pos = 0;
 				mbc[mbc_pos++] = c;
@@ -545,7 +544,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 
 				default:
 					wc_width = wcwidth(wc);
-					if (wc_width > 0)
+					if (0 < wc_width)
 						column += wc_width;
 				}
 			} else
@@ -569,17 +568,17 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 			}
 		}
 
-		if (column >= ctl->num_columns && ctl->fold_opt)
+		if (ctl->num_columns <= column && ctl->fold_opt)
 			break;
 #ifdef HAVE_WIDECHAR
-		if (use_mbc_buffer_flag == 0 && p >= &ctl->linebuf[ctl->linesz - 1 - 4])
+		if (use_mbc_buffer_flag == 0 && (&ctl->linebuf[ctl->linesz - 1 - 4]) <= p)
 			/* don't read another char if there is no space for
 			 * whole multibyte sequence */
 			break;
 #endif
 		c = more_getc(ctl, f);
 	}
-	if (column >= ctl->num_columns && ctl->num_columns > 0)
+	if (0 < ctl->num_columns && ctl->num_columns <= column)
 		if (!ctl->wrap_margin)
 			*p++ = '\n';
 	colflg = column == ctl->num_columns && ctl->fold_opt;
@@ -637,7 +636,7 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 	char c;			/* next output character */
 	int state;		/* next output char's UL state */
 
-	while (--n >= 0) {
+	while (0 <= --n) {
 		if (!ctl->ul_opt) {
 			putchar(*s++);
 			continue;
@@ -689,7 +688,7 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 
 static void output_prompt(struct more_control *ctl, char *filename)
 {
-	if (ctl->promptlen > 0)
+	if (0 < ctl->promptlen)
 		erase_line(ctl);
 	if (!ctl->hard_term) {
 		if (ctl->std_enter) {
@@ -790,8 +789,8 @@ static void change_file(struct more_control *ctl, int nskip)
 {
 	if (nskip == 0)
 		return;
-	if (nskip > 0) {
-		if (ctl->argv_position + nskip > ctl->num_files - 1)
+	if (0 < nskip) {
+		if ((ctl->num_files - 1) < (ctl->argv_position + nskip))
 			nskip = ctl->num_files - ctl->argv_position - 1;
 	}
 	ctl->argv_position += nskip;
@@ -800,7 +799,7 @@ static void change_file(struct more_control *ctl, int nskip)
 	puts(_("\n...Skipping "));
 	if (ctl->clreol_opt)
 		putp(ctl->eraseln);
-	if (nskip > 0)
+	if (0 < nskip)
 		fputs(_("...Skipping to file "), stdout);
 	else
 		fputs(_("...Skipping back to file "), stdout);
@@ -850,15 +849,15 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 	int maxlen = 0;
 
 	while (sp - buf < nmax) {
-		if (ctl->promptlen > maxlen)
+		if (maxlen < ctl->promptlen)
 			maxlen = ctl->promptlen;
 		c = read_char(ctl);
 		if (c == '\\')
 			slash = 1;
 		else if (c == ctl->output_tty.c_cc[VERASE] && !slash) {
-			if (sp > buf) {
+			if (buf < sp) {
 #ifdef HAVE_WIDECHAR
-				if (MB_CUR_MAX > 1) {
+				if (1 < MB_CUR_MAX) {
 					wchar_t wc;
 					size_t pos = 0, mblength;
 					mbstate_t state, state_bak;
@@ -880,7 +879,7 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 						     || mblength ==
 						     0) ? 1 : mblength;
 
-						if (buf + pos + mblength >= sp)
+						if (sp <= (buf + pos + mblength))
 							break;
 
 						pos += mblength;
@@ -955,7 +954,7 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 	*--sp = '\0';
 	if (!ctl->eraseln)
 		ctl->promptlen = maxlen;
-	if (sp - buf >= nmax - 1)
+	if (nmax < (sp - buf))
 		more_error(ctl, _("Line too long"));
 }
 
@@ -1055,7 +1054,7 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 	int argcount;
 
 	fflush(NULL);
-	for (n = 10; (id = fork()) < 0 && n > 0; n--)
+	for (n = 10; (id = fork()) < 0 && 0 < n; n--)
 		sleep(5);
 	if (id == 0) {
 		if (!isatty(STDIN_FILENO)) {
@@ -1100,8 +1099,8 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 		fputs(_("exec failed\n"), stderr);
 		exit(EXIT_FAILURE);
 	}
-	if (id > 0) {
-		while (wait(0) > 0)
+	if (0 < id) {
+		while (0 < wait(0))
 			/* nothing */ ;
 	} else
 		fputs(_("can't fork\n"), stderr);
@@ -1137,7 +1136,7 @@ static void do_shell(struct more_control *ctl, char *filename)
 			fputs(_("  Overflow\n"), stderr);
 			output_prompt(ctl, filename);
 			return;
-		} else if (rc > 0) {
+		} else if (0 < rc) {
 			erase_line(ctl);
 			ctl->promptlen = printf("!%s", ctl->shell_line);
 		}
@@ -1174,7 +1173,7 @@ static int colon_command(struct more_control *ctl, char *filename, int cmd, int 
 		return -1;
 	case 'n':
 		if (nlines == 0) {
-			if (ctl->argv_position >= ctl->num_files - 1)
+			if ((ctl->num_files - 1) <= ctl->argv_position)
 				exit_more(ctl);
 			nlines++;
 		}
@@ -1208,7 +1207,7 @@ static void skip_lines(struct more_control *ctl, FILE *f)
 {
 	int c, n = ctl->jump_len;
 
-	while (n > 0) {
+	while (0 < n) {
 		while ((c = more_getc(ctl, f)) != '\n')
 			if (c == EOF)
 				return;
@@ -1300,7 +1299,7 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 		lncount++;
 		if (regexec(&re, ctl->linebuf, 0, NULL, 0) == 0) {
 			if (--n == 0) {
-				if (lncount > 3 || (lncount > 1 && ctl->no_intty)) {
+				if ((1 < lncount && ctl->no_intty) || 3 < lncount) {
 					putchar('\n');
 					if (ctl->clreol_opt)
 						putp(ctl->eraseln);
@@ -1308,7 +1307,7 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 				}
 				if (!ctl->no_intty) {
 					ctl->current_line -=
-					    (lncount >= 3 ? 3 : lncount);
+					    (lncount < 3 ? lncount : 3);
 					more_fseek(ctl, file, line3);
 					if (ctl->noscroll_opt) {
 						if (ctl->clreol_opt) {
@@ -1460,7 +1459,7 @@ static int skip_forwards(struct more_control *ctl, FILE *f, int nlines, char com
 	if (ctl->clreol_opt)
 		puts(ctl->eraseln);
 	putchar('\n');
-	while (nlines > 0) {
+	while (0 < nlines) {
 		int c;
 		while ((c = more_getc(ctl, f)) != '\n')
 			if (c == EOF)
@@ -1567,7 +1566,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		switch (comchar) {
 		case ':':
 			retval = colon_command(ctl, filename, colonch, nlines);
-			if (retval >= 0)
+			if (0 <= retval)
 				done++;
 			break;
 		case 'b':
@@ -1717,7 +1716,7 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 	static int prev_len = 1;	/* length of previous line */
 
 	for (;;) {
-		while (num_lines > 0 && !ctl->is_paused) {
+		while (0 < num_lines && !ctl->is_paused) {
 			if ((nchars = get_line(ctl, f, &length)) == EOF) {
 				if (ctl->clreol_opt)
 					putp(ctl->end_clear);
@@ -1751,9 +1750,9 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 			if ((num_lines = command(ctl, NULL, f)) == 0)
 				return;
 		} while (ctl->search_called && !ctl->previousre);
-		if (ctl->hard_term && ctl->promptlen > 0)
+		if (ctl->hard_term && 0 < ctl->promptlen)
 			erase_line(ctl);
-		if (ctl->noscroll_opt && num_lines >= ctl->lines_per_screen) {
+		if (ctl->noscroll_opt && ctl->lines_per_screen <= num_lines) {
 			if (ctl->clreol_opt)
 				putp(ctl->go_home);
 			else
@@ -1769,7 +1768,7 @@ static void copy_file(FILE *f)
 	char buf[BUFSIZ];
 	size_t sz;
 
-	while ((sz = fread(&buf, sizeof(char), sizeof(buf), f)) > 0)
+	while (0 < (sz = fread(&buf, sizeof(char), sizeof(buf), f)))
 		fwrite(&buf, sizeof(char), sz, stdout);
 }
 
@@ -1899,7 +1898,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 			puts(ctl->file_names[ctl->argv_position]);
 			erase_line(ctl);
 			puts(separator);
-			if (left > ctl->lines_per_page - 4)
+			if ((ctl->lines_per_page - 4) < left)
 				left = ctl->lines_per_page - 4;
 		}
 		if (ctl->no_tty)
@@ -1961,7 +1960,7 @@ int main(int argc, char **argv)
 	if ((s = getenv("MORE")) != NULL)
 		argscan(&ctl, s);
 
-	while (--ctl.num_files > 0) {
+	while (0 < --ctl.num_files) {
 		if ((c = (*++ctl.file_names)[0]) == '-') {
 			argscan(&ctl, *ctl.file_names + 1);
 		} else if (c == '+') {
@@ -1993,7 +1992,7 @@ int main(int argc, char **argv)
 	if (ctl.lines_per_screen == 0)
 		ctl.lines_per_screen = ctl.lines_per_page - 1;
 	left = ctl.lines_per_screen;
-	if (ctl.num_files > 1)
+	if (1 < ctl.num_files)
 		ctl.print_names = 1;
 	if (!ctl.no_intty && ctl.num_files == 0)
 		usage(stderr);
