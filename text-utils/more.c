@@ -147,8 +147,6 @@ struct more_control {
 	char *std_exit;			/* exit standout mode */
 	char *underline_enter;		/* enter underline mode */
 	char *underline_exit;		/* exit underline mode */
-	char *underlining_char;		/* underline character */
-	char *backspace_char;		/* backspace character */
 	char *go_home;			/* go to screen home position */
 	char *end_clear;		/* clear rest of screen */
 	int num_columns;		/* number of columns */
@@ -193,9 +191,7 @@ struct more_control {
 		squeeze_opt:1,		/* suppress white space */
 		stdout_glitch:1,	/* terminal has standout mode glitch */
 		stop_opt:1,		/* stop after form feeds */
-		ul_glitch:1,		/* terminal is underlining in glitch mode */
 		ul_opt:1,		/* underline as best we can */
-		underlining:1,		/* is underlining going on */
 		wrap_margin:1;		/* set if automargins */
 };
 
@@ -611,21 +607,30 @@ static void erase_line(struct more_control *ctl)
 }
 
 #ifdef HAVE_WIDECHAR
-static UL_ASAN_BLACKLIST size_t xmbrtowc(wchar_t *wc, const char *s, size_t n,
-				  mbstate_t *mbstate)
+static UL_ASAN_BLACKLIST size_t xmbrtowc(const char *s, size_t n)
 {
-	const size_t mblength = mbrtowc(wc, s, n, mbstate);
+	wchar_t wc;
+	mbstate_t mbstate;
+	const size_t mblength = mbrtowc(&wc, s, n, &mbstate);
 	if (mblength == (size_t)-2 || mblength == (size_t)-1)
 		return 1;
 	return mblength;
 }
+#else
+/* compiler should remove this function as result of optimization */
+static __attribute__((const))size_t
+xmbrtowc(const char *s __attribute__((__unused__)),
+	 const size_t n __attribute__((__unused__)))
+{
+	return 1;
+}
 #endif
 
-static int would_underline(char *s, int n)
+static int underline_chars(char *s)
 {
-	if (n < 2)
-		return 0;
-	if ((s[0] == '_' && s[1] == '\b') || (s[1] == '\b' && s[2] == '_'))
+	if (s[0] == '_' && s[1] == '\b')
+		return 1;
+	if (s[0] == '\b' && s[1] == '_')
 		return 1;
 	return 0;
 }
@@ -633,56 +638,29 @@ static int would_underline(char *s, int n)
 /* Print a buffer of n characters */
 static void print_buffer(struct more_control *ctl, char *s, int n)
 {
-	char c;			/* next output character */
-	int state;		/* next output char's UL state */
+	int within_ul = 0;
 
-	while (0 <= --n) {
-		if (!ctl->ul_opt) {
-			putchar(*s++);
-			continue;
-		}
-		if (*s == ' ' && ctl->underlining == 0 && ctl->ul_glitch
-		    && would_underline(s + 1, n - 1)) {
-			s++;
-			continue;
-		}
-		if ((state = would_underline(s, n)) != 0) {
-			c = (*s == '_') ? s[2] : *s;
+	if (!ctl->ul_opt || (memmem(s, n, "_\b", 2) == NULL && memmem(s, n, "\b_", 2) == NULL)) {
+		fwrite(s, sizeof(char), n, stdout);
+		return;
+	}
+	while (0 < n--) {
+		if (2 < n && underline_chars(s)) {
 			n -= 2;
-			s += 3;
-		} else
-			c = *s++;
-		if (state != ctl->underlining) {
-			if (c == ' ' && state == 0 && ctl->ul_glitch
-			    && would_underline(s, n - 1))
-				state = 1;
-			else
-				putp(state ? ctl->underline_enter : ctl->underline_exit);
+			s += 2;
+			if (within_ul == 0) {
+				putp(ctl->underline_enter);
+				within_ul = 1;
+			}
+			if (n < 2 || (2 < n && !underline_chars(s + xmbrtowc(s, n))))
+				within_ul = 2;
 		}
-		if (c != ' ' || ctl->underlining == 0 || state != 0
-		    || ctl->ul_glitch == 0)
-#ifdef HAVE_WIDECHAR
-		{
-			wchar_t wc;
-			size_t mblength;
-			mbstate_t mbstate;
-
-			memset(&mbstate, 0, sizeof mbstate);
-			s--;
-			n++;
-			mblength = xmbrtowc(&wc, s, n, &mbstate);
-			while (mblength--)
-				putchar(*s++);
-			n += mblength;
+		putchar(*s);
+		if (within_ul == 2 || n == 0 || *s == '\n') {
+			putp(ctl->underline_exit);
+			within_ul = 0;
 		}
-#else
-			putchar(c);
-#endif				/* HAVE_WIDECHAR */
-		if (state && *ctl->underlining_char) {
-			putp(ctl->backspace_char);
-			putp(ctl->underlining_char);
-		}
-		ctl->underlining = state;
+		s++;
 	}
 }
 
@@ -722,10 +700,6 @@ static void reset_tty(struct more_control *ctl)
 {
 	if (ctl->no_tty)
 		return;
-	if (ctl->underlining) {
-		putp(ctl->underline_exit);
-		ctl->underlining = 0;
-	}
 	fflush(NULL);
 	ctl->output_tty.c_lflag |= ICANON | ECHO;
 	ctl->output_tty.c_cc[VMIN] = ctl->orig_tty.c_cc[VMIN];
@@ -1733,10 +1707,6 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 				print_buffer(ctl, "\n", 1);	/* will turn off UL if necessary */
 			num_lines--;
 		}
-		if (ctl->underlining) {
-			putp(ctl->underline_exit);
-			ctl->underlining = 0;
-		}
 		fflush(stdout);
 		if ((c = more_getc(ctl, f)) == EOF) {
 			if (ctl->clreol_opt)
@@ -1841,19 +1811,10 @@ static void initterm(struct more_control *ctl)
 	if (tigetflag(TERM_UNDERLINE)
 	    || tigetflag(TERM_OVER_STRIKE))
 		ctl->ul_opt = 0;
-	if ((ctl->underlining_char = tigetstr(TERM_UNDERLINE_CHAR)) == NULL)
-		ctl->underlining_char = "";
-	if (((ctl->underline_enter = tigetstr(TERM_ENTER_UNDERLINE)) == NULL
-	     || (ctl->underline_exit = tigetstr(TERM_EXIT_UNDERLINE)) == NULL)
-	    && !*ctl->underlining_char) {
-		if ((ctl->underline_enter = ctl->std_enter) == NULL
-		    || (ctl->underline_exit = ctl->std_exit) == NULL) {
-			ctl->underline_enter = "";
-			ctl->underline_exit = "";
-		} else
-			ctl->ul_glitch = ctl->stdout_glitch;
-	} else {
-		ctl->ul_glitch = 0;
+	if (((ctl->underline_enter = tigetstr(TERM_ENTER_UNDERLINE)) == NULL)
+	     || ((ctl->underline_exit = tigetstr(TERM_EXIT_UNDERLINE)) == NULL)) {
+		ctl->underline_enter = "";
+		ctl->underline_exit = "";
 	}
 	cursorm = tigetstr(TERM_HOME);
 	if (cursorm == NULL || cursorm == (char *)-1) {
@@ -1863,8 +1824,6 @@ static void initterm(struct more_control *ctl)
 	}
 	ctl->go_home = xstrdup(cursorm);
 	ctl->end_clear = tigetstr(TERM_CLEAR_TO_SCREEN_END);
-	if ((ctl->backspace_char = tigetstr(TERM_LINE_DOWN)) == NULL)
-		ctl->backspace_char = "\b";
 }
 
 static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int left)
