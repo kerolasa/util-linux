@@ -108,7 +108,9 @@
 #define TERM_COLS                 "cols"
 #define TERM_CURSOR_ADDRESS       "cup"
 #define TERM_EAT_NEW_LINE         "xenl"
+#define TERM_ENTER_BOLD           "bold"
 #define TERM_ENTER_UNDERLINE      "smul"
+#define TERM_EXIT_BOLD            "sgr0"
 #define TERM_EXIT_STANDARD_MODE   "rmso"
 #define TERM_EXIT_UNDERLINE       "rmul"
 #define TERM_HARD_COPY            "hc"
@@ -147,6 +149,8 @@ struct more_control {
 	char *std_exit;			/* exit standout mode */
 	char *underline_enter;		/* enter underline mode */
 	char *underline_exit;		/* exit underline mode */
+	char *bold_enter;		/* enter bold mode */
+	char *bold_exit;		/* exit bold mode */
 	char *go_home;			/* go to screen home position */
 	char *end_clear;		/* clear rest of screen */
 	int num_columns;		/* number of columns */
@@ -211,7 +215,7 @@ static void __attribute__((__noreturn__)) usage(FILE *out)
 	fputs(_(" -c          do not scroll, display text and clean line ends\n"), out);
 	fputs(_(" -p          do not scroll, clean screen and display text\n"), out);
 	fputs(_(" -s          squeeze multiple blank lines into one\n"), out);
-	fputs(_(" -u          suppress underlining\n"), out);
+	fputs(_(" -u          suppress underlining and bold\n"), out);
 	fputs(_(" -i          ignore case when searching\n"), out);
 	fputs(_(" -<number>   the number of lines per screenful\n"), out);
 	fputs(_(" -n <number> same as -<number>\n"), out);
@@ -635,12 +639,25 @@ static int underline_chars(char *s)
 	return 0;
 }
 
+static int bold_chars(char *s)
+{
+	if (s[0] == s[2] && s[1] == '\b')
+		return 1;
+	return 0;
+}
+
 /* Print a buffer of n characters */
 static void print_buffer(struct more_control *ctl, char *s, int n)
 {
-	int within_ul = 0;
+	enum {
+		HL_OFF = 0,
+		HL_ON,
+		HL_END
+	};
+	int within_ul = HL_OFF;
+	int within_bold = HL_OFF;
 
-	if (!ctl->ul_opt || (memmem(s, n, "_\b", 2) == NULL && memmem(s, n, "\b_", 2) == NULL)) {
+	if (!ctl->ul_opt || (memchr(s, '\b', n) == NULL)) {
 		fwrite(s, sizeof(char), n, stdout);
 		return;
 	}
@@ -648,17 +665,31 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 		if (2 < n && underline_chars(s)) {
 			n -= 2;
 			s += 2;
-			if (within_ul == 0) {
+			if (within_ul == HL_OFF) {
 				putp(ctl->underline_enter);
-				within_ul = 1;
+				within_ul = HL_ON;
 			}
 			if (n < 2 || (2 < n && !underline_chars(s + xmbrtowc(s, n))))
-				within_ul = 2;
+				within_ul = HL_END;
+		}
+		if (3 < n && bold_chars(s)) {
+			n -= 2;
+			s += 2;
+			if (within_bold == HL_OFF) {
+				putp(ctl->bold_enter);
+				within_bold = HL_ON;
+			}
+			if (n < 3 || (3 < n && !bold_chars(s + xmbrtowc(s, n))))
+				within_bold = HL_END;
 		}
 		putchar(*s);
-		if (within_ul == 2 || n == 0 || *s == '\n') {
+		if (within_ul == HL_END || n == 0 || *s == '\n') {
 			putp(ctl->underline_exit);
-			within_ul = 0;
+			within_ul = HL_OFF;
+		}
+		if (within_bold == HL_END || n == 0 || *s == '\n') {
+			putp(ctl->bold_exit);
+			within_bold = HL_OFF;
 		}
 		s++;
 	}
@@ -1815,6 +1846,11 @@ static void initterm(struct more_control *ctl)
 	     || ((ctl->underline_exit = tigetstr(TERM_EXIT_UNDERLINE)) == NULL)) {
 		ctl->underline_enter = "";
 		ctl->underline_exit = "";
+	}
+	if (((ctl->bold_enter = tigetstr(TERM_ENTER_BOLD)) == NULL
+	     || (ctl->bold_exit = tigetstr(TERM_EXIT_BOLD)) == NULL)) {
+		ctl->bold_enter = "";
+		ctl->bold_exit = "";
 	}
 	cursorm = tigetstr(TERM_HOME);
 	if (cursorm == NULL || cursorm == (char *)-1) {
