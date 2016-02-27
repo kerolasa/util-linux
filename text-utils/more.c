@@ -1431,23 +1431,17 @@ static int skip_backwards(struct more_control *ctl, FILE *f, int nlines)
 	if (nlines == 0)
 		nlines++;
 	erase_line(ctl);
-	putchar('\n');
-	if (ctl->clreol_opt)
-		putp(ctl->eraseln);
 	printf(P_("...back %d page", "...back %d pages", nlines), nlines);
-	if (ctl->clreol_opt)
-		putp(ctl->eraseln);
 	putchar('\n');
-	ctl->jump_len = ctl->current_line - ctl->lines_per_screen * (nlines + 1);
+	ctl->jump_len = ctl->current_line - (ctl->lines_per_screen * (nlines + 1));
 	if (!ctl->noscroll_opt)
 		ctl->jump_len--;
-	if (ctl->jump_len < 0)
-		ctl->jump_len = 0;
 	more_fseek(ctl, f, 0);
-	ctl->current_line = 0;	/* skip_lines() will make current_line correct */
-	skip_lines(ctl, f);
-	if (!ctl->noscroll_opt)
-		return ctl->lines_per_screen + 1;
+	ctl->current_line = 0;
+	if (ctl->jump_len < 1)
+		ctl->jump_len = 0;
+	else
+		skip_lines(ctl, f);
 	return ctl->lines_per_screen;
 }
 
@@ -1458,21 +1452,10 @@ static int skip_forwards(struct more_control *ctl, FILE *f, int nlines, char com
 	if (comchar == 'f')
 		nlines *= ctl->lines_per_screen;
 	erase_line(ctl);
-	putchar('\n');
-	if (ctl->clreol_opt)
-		puts(ctl->eraseln);
 	printf(P_("...skipping %d line", "...skipping %d lines", nlines), nlines);
-	if (ctl->clreol_opt)
-		puts(ctl->eraseln);
 	putchar('\n');
-	while (0 < nlines) {
-		int c;
-		while ((c = more_getc(ctl, f)) != '\n')
-			if (c == EOF)
-				return 0;
-		ctl->current_line++;
-		nlines--;
-	}
+	ctl->jump_len = nlines;
+	skip_lines(ctl, f);
 	return 1;
 }
 
