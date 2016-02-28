@@ -1883,7 +1883,7 @@ static void initterm(struct more_control *ctl)
 	ctl->end_clear = tigetstr(TERM_CLEAR_TO_SCREEN_END);
 }
 
-static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int left)
+static void display_file(struct more_control *ctl, FILE *f, char *initbuf)
 {
 	ctl->context.line_num = ctl->context.row_num = 0;
 	ctl->current_line = 0;
@@ -1895,38 +1895,32 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 			free(ctl->previousre);
 			ctl->previousre = xstrdup(initbuf);
 			search(ctl, initbuf, f, 1);
-			if (ctl->noscroll_opt)
-				left--;
 		} else if (ctl->jump_defined)
 			skip_lines(ctl, f);
 	} else if (ctl->argv_position < ctl->num_files && !ctl->no_tty)
-		left = command(ctl, ctl->file_names[ctl->argv_position], f);
-	if (left != 0) {
-		if ((ctl->noscroll_opt || ctl->clearfirst)
-		    && (ctl->file_size != LONG_MAX)) {
-			if (ctl->clreol_opt)
-				tputs(ctl->go_home, STDOUT_FILENO, putchar);
-			else
-				clear_tty(ctl);
-		}
-		/* file banner, printed when multiple files being displayed */
-		if (ctl->print_names) {
-			const char separator[] = "::::::::::::::";
-			erase_line(ctl);
-			puts(separator);
-			erase_line(ctl);
-			puts(ctl->file_names[ctl->argv_position]);
-			erase_line(ctl);
-			puts(separator);
-			if ((ctl->lines_per_page - 4) < left)
-				left = ctl->lines_per_page - 4;
-		}
-		/* a file specific outputing happens here */
-		if (ctl->no_tty)
-			copy_file(f);
+		command(ctl, ctl->file_names[ctl->argv_position], f);
+	if ((ctl->noscroll_opt || ctl->clearfirst)
+	    && (ctl->file_size != LONG_MAX)) {
+		if (ctl->clreol_opt)
+			tputs(ctl->go_home, STDOUT_FILENO, putchar);
 		else
-			screen(ctl, f, left);
+			clear_tty(ctl);
 	}
+	/* file banner, printed when multiple files being displayed */
+	if (ctl->print_names) {
+		static const char separator[] = "::::::::::::::";
+		erase_line(ctl);
+		puts(separator);
+		erase_line(ctl);
+		puts(ctl->file_names[ctl->argv_position]);
+		erase_line(ctl);
+		puts(separator);
+	}
+	/* a file specific outputing happens here */
+	if (ctl->no_tty)
+		copy_file(f);
+	else
+		screen(ctl, f, ctl->lines_per_page - 1);
 	fflush(NULL);
 	fclose(f);
 	ctl->screen_start.line_num = ctl->screen_start.row_num = 0L;
@@ -1938,7 +1932,6 @@ int main(int argc, char **argv)
 	FILE *f;
 	char *s;
 	int c;
-	int left;
 	char *initbuf = NULL;
 	sigset_t sigset;
 	struct more_control ctl = {
@@ -2013,7 +2006,6 @@ int main(int argc, char **argv)
 	}
 	if (ctl.lines_per_screen == 0)
 		ctl.lines_per_screen = ctl.lines_per_page - 1;
-	left = ctl.lines_per_screen;
 	if (1 < ctl.num_files)
 		ctl.print_names = 1;
 	if (!ctl.no_intty && ctl.num_files == 0)
@@ -2035,7 +2027,7 @@ int main(int argc, char **argv)
 			copy_file(stdin);
 		else {
 			f = stdin;
-			display_file(&ctl, f, initbuf, left);
+			display_file(&ctl, f, initbuf);
 		}
 		ctl.first_file = 0;
 		ctl.no_intty = 0;
@@ -2044,7 +2036,7 @@ int main(int argc, char **argv)
 	for (/* nothing */; ctl.argv_position < ctl.num_files; ctl.argv_position++) {
 		if ((f = more_fopen(&ctl, ctl.file_names[ctl.argv_position])) == NULL)
 			continue;
-		display_file(&ctl, f, initbuf, left);
+		display_file(&ctl, f, initbuf);
 		ctl.first_file = 0;
 	}
 	exit_more(&ctl);
