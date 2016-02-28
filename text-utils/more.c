@@ -339,8 +339,6 @@ static FILE *more_fopen(struct more_control *ctl, char *fs)
 
 	fflush(NULL);
 	if (stat(fs, &stbuf) == -1) {
-		if (ctl->clreol_opt)
-			putp(ctl->eraseln);
 		warn(_("stat of %s failed"), fs);
 		return NULL;
 	}
@@ -704,8 +702,6 @@ static void output_prompt(struct more_control *ctl, char *filename)
 			putp(ctl->std_enter);
 			ctl->promptlen += (2 * ctl->stdout_glitch);
 		}
-		if (ctl->clreol_opt)
-			putp(ctl->eraseln);
 		ctl->promptlen += printf(_("--More--"));
 		if (filename != NULL)
 			ctl->promptlen += printf(_("(Next file: %s)"), filename);
@@ -720,8 +716,6 @@ static void output_prompt(struct more_control *ctl, char *filename)
 		}
 		if (ctl->std_exit)
 			putp(ctl->std_exit);
-		if (ctl->clreol_opt)
-			putp(ctl->end_clear);
 	} else
 		fputc('\a', stderr);
 	fflush(NULL);
@@ -801,17 +795,16 @@ static void change_file(struct more_control *ctl, int nskip)
 	ctl->argv_position += nskip;
 	if (ctl->argv_position < 0)
 		ctl->argv_position = 0;
-	puts(_("\n...Skipping "));
-	if (ctl->clreol_opt)
-		putp(ctl->eraseln);
+	if (!ctl->clreol_opt)
+		putchar('\n');
+	puts(_("...Skipping "));
 	if (0 < nskip)
 		fputs(_("...Skipping to file "), stdout);
 	else
 		fputs(_("...Skipping back to file "), stdout);
-	putp(ctl->file_names[ctl->argv_position]);
-	if (ctl->clreol_opt)
-		putp(ctl->eraseln);
-	putchar('\n');
+	puts(ctl->file_names[ctl->argv_position]);
+	if (!ctl->clreol_opt)
+		putchar('\n');
 	ctl->argv_position--;
 }
 
@@ -1317,7 +1310,9 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 					more_fseek(ctl, file, line3);
 					if (ctl->noscroll_opt) {
 						if (ctl->clreol_opt) {
-							putp(ctl->go_home);
+							tputs(ctl->go_home,
+							      STDOUT_FILENO,
+							      putchar);
 							putp(ctl->eraseln);
 						} else
 							clear_tty(ctl);
@@ -1326,7 +1321,9 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 					erase_line(ctl);
 					if (ctl->noscroll_opt) {
 						if (ctl->clreol_opt) {
-							putp(ctl->go_home);
+							tputs(ctl->go_home,
+							      STDOUT_FILENO,
+							      putchar);
 							putp(ctl->eraseln);
 						} else
 							clear_tty(ctl);
@@ -1709,7 +1706,7 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 		while (0 < num_lines && !ctl->is_paused) {
 			if ((nchars = get_line(ctl, f, &length)) == EOF) {
 				if (ctl->clreol_opt)
-					putp(ctl->end_clear);
+					tputs(ctl->end_clear, STDOUT_FILENO, putchar);
 				return;
 			}
 			if (ctl->squeeze_opt && length == 0 && prev_len == 0)
@@ -1717,6 +1714,8 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 			prev_len = length;
 			erase_line(ctl);
 			print_buffer(ctl, ctl->linebuf, length);
+			if (ctl->clreol_opt)
+				tputs(ctl->eraseln, STDOUT_FILENO, putchar);
 			if (nchars < ctl->num_columns || !ctl->fold_opt)
 				print_buffer(ctl, "\n", 1);	/* will turn off UL if necessary */
 			num_lines--;
@@ -1724,23 +1723,25 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 		fflush(stdout);
 		if ((c = more_getc(ctl, f)) == EOF) {
 			if (ctl->clreol_opt)
-				putp(ctl->end_clear);
+				tputs(ctl->end_clear, STDOUT_FILENO, putchar);
 			return;
 		}
 
 		if (ctl->is_paused && ctl->clreol_opt)
-			putp(ctl->end_clear);
+			tputs(ctl->end_clear, STDOUT_FILENO, putchar);
 		more_ungetc(ctl, c, f);
 		ctl->is_paused = 0;
 		do {
 			if ((num_lines = command(ctl, NULL, f)) == 0)
 				return;
 		} while (ctl->search_called && !ctl->previousre);
+		if (ctl->clreol_opt)
+			printf("\b \b");
 		if (ctl->hard_term && 0 < ctl->promptlen)
 			erase_line(ctl);
 		if (ctl->noscroll_opt && ctl->lines_per_screen <= num_lines) {
 			if (ctl->clreol_opt)
-				putp(ctl->go_home);
+				tputs(ctl->go_home, STDOUT_FILENO, putchar);
 			else
 				clear_tty(ctl);
 		}
@@ -1866,7 +1867,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 		if ((ctl->noscroll_opt || ctl->clearfirst)
 		    && (ctl->file_size != LONG_MAX)) {
 			if (ctl->clreol_opt)
-				puts(ctl->go_home);
+				tputs(ctl->go_home, STDOUT_FILENO, putchar);
 			else
 				clear_tty(ctl);
 		}
