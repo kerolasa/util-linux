@@ -226,6 +226,7 @@ static void __attribute__((__noreturn__)) usage(FILE *out)
 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
+/* command line argument parser */
 static void argscan(struct more_control *ctl, char *s)
 {
 	int seen_num = 0;
@@ -386,7 +387,7 @@ static void prepare_line_buffer(struct more_control *ctl)
 	ctl->linesz = nsz;
 }
 
-/* Get a logical line */
+/* Get a logical line from input file */
 static int get_line(struct more_control *ctl, FILE *f, int *length)
 {
 	int c;
@@ -632,6 +633,7 @@ static int underline_chars(char *s)
 {
 	if (s[0] == '_' && s[1] == '\b')
 		return 1;
+	/* FIXME: is '\b_' is used or supported for underlining somewhere? */
 	if (s[0] == '\b' && s[1] == '_')
 		return 1;
 	return 0;
@@ -655,21 +657,29 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 	int within_ul = HL_OFF;
 	int within_bold = HL_OFF;
 
+	/* no underlining or bold, just output */
 	if (!ctl->ul_opt || (memchr(s, '\b', n) == NULL)) {
 		fwrite(s, sizeof(char), n, stdout);
 		return;
 	}
+	/* this will print line a character at a time */
 	while (0 < n--) {
+		/* detect underlining */
 		if (2 < n && underline_chars(s)) {
 			n -= 2;
 			s += 2;
 			if (within_ul == HL_OFF) {
+				/* make terminal to use underline */
 				putp(ctl->underline_enter);
 				within_ul = HL_ON;
 			}
+			/* each char has underlining markup in front of
+			 * them, so as long they repeat do not stop
+			 * underlining */
 			if (n < 2 || (2 < n && !underline_chars(s + xmbrtowc(s, n))))
 				within_ul = HL_END;
 		}
+		/* detect bold, using same logic as with underlining */
 		if (3 < n && bold_chars(s)) {
 			n -= 2;
 			s += 2;
@@ -681,6 +691,8 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 				within_bold = HL_END;
 		}
 		putchar(*s);
+		/* end underlining when underlining chars stop appearing, or
+		 * at end of line */
 		if (within_ul == HL_END || n == 0 || *s == '\n') {
 			putp(ctl->underline_exit);
 			within_ul = HL_OFF;
@@ -721,8 +733,9 @@ static void output_prompt(struct more_control *ctl, char *filename)
 	fflush(NULL);
 }
 
-static void reset_tty(struct more_control *ctl)
-{
+/* return to normal terminal state.  used at exit, before executing
+ * commands, and so on */
+static void reset_tty(struct more_control *ctl) {
 	if (ctl->no_tty)
 		return;
 	fflush(NULL);
@@ -747,6 +760,7 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 	exit(EXIT_SUCCESS);
 }
 
+/* read one character of input from user */
 static cc_t read_char(struct more_control *ctl)
 {
 	cc_t c = 0;
@@ -808,6 +822,7 @@ static void change_file(struct more_control *ctl, int nskip)
 	ctl->argv_position--;
 }
 
+/* convert erase to ^ character */
 static void show(struct more_control *ctl, char c)
 {
 	if ((c < ' ' && c != '\n' && c != ESC) || c == CERASE) {
@@ -839,6 +854,7 @@ static void erase_one_column(struct more_control *ctl)
 	fputs("\b", stderr);
 }
 
+/* the ttyin() is practically a readline() */
 static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 {
 	char *sp = buf;
@@ -981,6 +997,7 @@ static int command_expansion(struct more_control *ctl, char **outbuf, char *inbu
 		}
 		switch (c) {
 		case '%':
+			/* current file */
 			if (!ctl->no_intty) {
 				strcpy(outstr, ctl->file_names[ctl->argv_position]);
 				outstr += strlen(ctl->file_names[ctl->argv_position]);
@@ -989,6 +1006,7 @@ static int command_expansion(struct more_control *ctl, char **outbuf, char *inbu
 				*outstr++ = c;
 			break;
 		case '!':
+			/* previous command */
 			if (!ctl->shellp)
 				more_error(ctl, _
 					   ("No previous command to substitute for"));
@@ -997,6 +1015,7 @@ static int command_expansion(struct more_control *ctl, char **outbuf, char *inbu
 			changed = 1;
 			break;
 		case '\\':
+			/* do not expand next % or ! char */
 			if (*inpstr == '%' || *inpstr == '!') {
 				*outstr++ = *inpstr++;
 				break;
@@ -1042,6 +1061,7 @@ static void free_args(char ***args)
 	free(*args);
 }
 
+/* this will execute '!command' or 'v' editor */
 static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 {
 	int id;
@@ -1109,6 +1129,7 @@ err:
 	output_prompt(ctl, filename);
 }
 
+/* the '!command' uses this function for execution */
 static void do_shell(struct more_control *ctl, char *filename)
 {
 	char cmdbuf[COMMAND_BUF];
@@ -1215,7 +1236,7 @@ static void skip_lines(struct more_control *ctl, FILE *f)
 	}
 }
 
-/*  Clear the screen */
+/* Clear the screen */
 static void clear_tty(struct more_control *ctl)
 {
 	if (ctl->clear && !ctl->hard_term) {
@@ -1226,6 +1247,7 @@ static void clear_tty(struct more_control *ctl)
 	}
 }
 
+/* search() is using this function to fill buffer for regexec() */
 static void read_line(struct more_control *ctl, FILE *f)
 {
 	int c;
@@ -1240,6 +1262,7 @@ static void read_line(struct more_control *ctl, FILE *f)
 	*p = '\0';
 }
 
+/* search timeout boolean */
 volatile sig_atomic_t alarm_received;
 
 static void sig_alarm_handler(int sig __attribute__((__unused__)))
@@ -1285,6 +1308,9 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 		more_error(ctl, s);
 		return;
 	}
+	/* alarm() is used to avoid infinite long searches.  the given 10
+	 * seconds should, even with slow IO, provide quite significant
+	 * search coverage  */
 	alarm_received = 0;
 	signal(SIGALRM, sig_alarm_handler);
 	alarm(SEARCH_TIMEOUT);
@@ -1334,6 +1360,7 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 			}
 		}
 	}
+	/* cancel alarm */
 	alarm(0);
 	signal(SIGALRM, SIG_DFL);
 	regfree(&re);
@@ -1433,6 +1460,7 @@ static int skip_backwards(struct more_control *ctl, FILE *f, int nlines)
 	ctl->jump_len = ctl->current_line - (ctl->lines_per_screen * (nlines + 1));
 	if (!ctl->noscroll_opt)
 		ctl->jump_len--;
+	/* go to beginning of the file and jump to requested line */
 	more_fseek(ctl, f, 0);
 	ctl->current_line = 0;
 	if (ctl->jump_len < 1)
@@ -1490,6 +1518,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 	char comchar, cmdbuf[INIT_BUF];
 	struct pollfd pfd[2];
 
+	/* setup file handles to wait input instructions or signals  */
 	pfd[0].fd = ctl->sigfd;
 	pfd[0].events = POLLIN | POLLERR | POLLHUP;
 	pfd[1].fd = STDIN_FILENO;
@@ -1506,6 +1535,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			more_error(ctl, _("poll failed"));
 			continue;
 		}
+		/* signal received */
 		if (pfd[0].revents != 0) {
 			struct signalfd_siginfo info;
 			ssize_t sz;
@@ -1533,6 +1563,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		}
 		if (pfd[1].revents == 0)
 			continue;
+		/* command input received */
 		nlines = read_number(ctl, &comchar);
 		ctl->rerun_command = colonch = 0;
 		if (comchar == '.') {	/* Repeat last command */
@@ -1703,6 +1734,7 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 	static int prev_len = 1;	/* length of previous line */
 
 	for (;;) {
+		/* get line -> print line */
 		while (0 < num_lines && !ctl->is_paused) {
 			if ((nchars = get_line(ctl, f, &length)) == EOF) {
 				if (ctl->clreol_opt)
@@ -1721,12 +1753,13 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 			num_lines--;
 		}
 		fflush(stdout);
+		/* clean up prompt if file ended */
 		if ((c = more_getc(ctl, f)) == EOF) {
 			if (ctl->clreol_opt)
 				tputs(ctl->end_clear, STDOUT_FILENO, putchar);
 			return;
 		}
-
+		/* wait for next command */
 		if (ctl->is_paused && ctl->clreol_opt)
 			tputs(ctl->end_clear, STDOUT_FILENO, putchar);
 		more_ungetc(ctl, c, f);
@@ -1736,8 +1769,11 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 				return;
 		} while (ctl->search_called && !ctl->previousre);
 		if (ctl->clreol_opt)
+			/* when command is \n it needs to be rubbed out, in other cases
+			 * this does the same as the following erase_line() */
 			printf("\b \b");
 		if (ctl->hard_term && 0 < ctl->promptlen)
+			/* got command, clear prompt as preparation to next print out */
 			erase_line(ctl);
 		if (ctl->noscroll_opt && ctl->lines_per_screen <= num_lines) {
 			if (ctl->clreol_opt)
@@ -1750,6 +1786,7 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 	}
 }
 
+/* uninteractive file printout */
 static void copy_file(FILE *f)
 {
 	char buf[BUFSIZ];
@@ -1851,6 +1888,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 	ctl->context.line_num = ctl->context.row_num = 0;
 	ctl->current_line = 0;
 	ctl->file_pos = 0;
+	/* apply command line search option and such to first file */
 	if (ctl->first_file) {
 		ctl->first_file = 0;
 		if (ctl->search_opt) {
@@ -1871,6 +1909,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 			else
 				clear_tty(ctl);
 		}
+		/* file banner, printed when multiple files being displayed */
 		if (ctl->print_names) {
 			const char separator[] = "::::::::::::::";
 			erase_line(ctl);
@@ -1882,6 +1921,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf, int l
 			if ((ctl->lines_per_page - 4) < left)
 				left = ctl->lines_per_page - 4;
 		}
+		/* a file specific outputing happens here */
 		if (ctl->no_tty)
 			copy_file(f);
 		else
@@ -1941,6 +1981,7 @@ int main(int argc, char **argv)
 	if ((s = getenv("MORE")) != NULL)
 		argscan(&ctl, s);
 
+	/* Parse command line arguments */
 	while (0 < --ctl.num_files) {
 		if ((c = (*++ctl.file_names)[0]) == '-') {
 			argscan(&ctl, *ctl.file_names + 1);
@@ -1988,6 +2029,7 @@ int main(int argc, char **argv)
 #endif
 	sigprocmask(SIG_BLOCK, &sigset, NULL);
 	ctl.sigfd = signalfd(-1, &sigset, SFD_CLOEXEC);
+	/* initializations are done, start displaying files one by one */
 	if (ctl.no_intty) {
 		if (ctl.no_tty)
 			copy_file(stdin);
@@ -1999,7 +2041,6 @@ int main(int argc, char **argv)
 		ctl.no_intty = 0;
 		ctl.print_names = 1;
 	}
-
 	for (/* nothing */; ctl.argv_position < ctl.num_files; ctl.argv_position++) {
 		if ((f = more_fopen(&ctl, ctl.file_names[ctl.argv_position])) == NULL)
 			continue;
