@@ -259,10 +259,10 @@ static void argscan(struct more_control *ctl, char *s)
 			ctl->no_bell = 1;
 			break;
 		case 'l':
-			ctl->stop_opt = 0;
+			ctl->stop_opt = 1;
 			break;
 		case 'f':
-			ctl->fold_opt = 0;
+			ctl->fold_opt = 1;
 			break;
 		case 'p':
 			ctl->noscroll_opt = 1;
@@ -274,7 +274,7 @@ static void argscan(struct more_control *ctl, char *s)
 			ctl->squeeze_opt = 1;
 			break;
 		case 'u':
-			ctl->ul_opt = 0;
+			ctl->ul_opt = 1;
 			break;
 		case 'i':
 			ctl->ignore_case_opt = 1;
@@ -416,7 +416,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 	}
 	while (p < &ctl->linebuf[ctl->linesz - 1]) {
 #ifdef HAVE_WIDECHAR
-		if (ctl->fold_opt && use_mbc_buffer_flag && 1 < MB_CUR_MAX) {
+		if (!ctl->fold_opt && use_mbc_buffer_flag && 1 < MB_CUR_MAX) {
 			use_mbc_buffer_flag = 0;
 			state_bak = state;
 			mbc[mbc_pos++] = c;
@@ -510,7 +510,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 			}
 			more_ungetc(ctl, next, f);
 			column = 0;
-		} else if (c == '\f' && ctl->stop_opt) {
+		} else if (c == '\f' && !ctl->stop_opt) {
 			p[-1] = '^';
 			*p++ = 'L';
 			column += 2;
@@ -520,7 +520,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 			return column;
 		} else {
 #ifdef HAVE_WIDECHAR
-			if (ctl->fold_opt && 1 < MB_CUR_MAX) {
+			if (!ctl->fold_opt && 1 < MB_CUR_MAX) {
 				memset(mbc, 0, MB_LEN_MAX);
 				mbc_pos = 0;
 				mbc[mbc_pos++] = c;
@@ -567,7 +567,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 			}
 		}
 
-		if (ctl->num_columns <= column && ctl->fold_opt)
+		if (ctl->num_columns <= column && !ctl->fold_opt)
 			break;
 #ifdef HAVE_WIDECHAR
 		if (use_mbc_buffer_flag == 0 && (&ctl->linebuf[ctl->linesz - 1 - 4]) <= p)
@@ -580,7 +580,7 @@ static int get_line(struct more_control *ctl, FILE *f, int *length)
 	if (0 < ctl->num_columns && ctl->num_columns <= column)
 		if (!ctl->wrap_margin)
 			*p++ = '\n';
-	colflg = column == ctl->num_columns && ctl->fold_opt;
+	colflg = column == ctl->num_columns && !ctl->fold_opt;
 	if (colflg && ctl->eatnl && ctl->wrap_margin)
 		*p++ = '\n';	/* simulate normal wrap */
 	*length = p - ctl->linebuf;
@@ -658,7 +658,7 @@ static void print_buffer(struct more_control *ctl, char *s, int n)
 	int within_bold = HL_OFF;
 
 	/* no underlining or bold, just output */
-	if (!ctl->ul_opt || (memchr(s, '\b', n) == NULL)) {
+	if (ctl->ul_opt || (memchr(s, '\b', n) == NULL)) {
 		fwrite(s, sizeof(char), n, stdout);
 		return;
 	}
@@ -1748,7 +1748,7 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 			print_buffer(ctl, ctl->linebuf, length);
 			if (ctl->clreol_opt)
 				tputs(ctl->eraseln, STDOUT_FILENO, putchar);
-			if (nchars < ctl->num_columns || !ctl->fold_opt)
+			if (nchars < ctl->num_columns || ctl->fold_opt)
 				print_buffer(ctl, "\n", 1);	/* will turn off UL if necessary */
 			num_lines--;
 		}
@@ -1936,10 +1936,7 @@ int main(int argc, char **argv)
 	sigset_t sigset;
 	struct more_control ctl = {
 		.first_file = 1,
-		.fold_opt = 1,
 		.notell = 1,
-		.stop_opt = 1,
-		.ul_opt = 1,
 		.wrap_margin = 1,
 		.lines_per_page = LINES_PER_PAGE,
 		.num_columns = NUM_COLUMNS,
