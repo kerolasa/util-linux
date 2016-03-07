@@ -1485,25 +1485,31 @@ static int skip_forwards(struct more_control *ctl, FILE *f, int nlines, char com
 }
 
 /* Come here if a signal for a window size change is received */
-#ifdef SIGWINCH
 static void change_window_sz(struct more_control *ctl)
 {
-	struct winsize win;
-
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
-		if (win.ws_row != 0) {
-			ctl->lines_per_page = win.ws_row;
-			ctl->d_scroll_len = ctl->lines_per_page / 2 - 1;
-			if (ctl->d_scroll_len <= 0)
-				ctl->d_scroll_len = 1;
-			ctl->lines_per_screen = ctl->lines_per_page - 1;
+	if (!ctl->hard_term) {
+		struct winsize win;
+		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
+			if (win.ws_row != 0) {
+				ctl->lines_per_page = win.ws_row;
+			}
+			if (win.ws_col != 0)
+				ctl->num_columns = win.ws_col;
+		} else {
+			ctl->lines_per_page = tigetnum(TERM_LINES);
+			ctl->num_columns = tigetnum(TERM_COLS);
 		}
-		if (win.ws_col != 0)
-			ctl->num_columns = win.ws_col;
 	}
+	if (ctl->lines_per_page < 1)
+		ctl->lines_per_page = LINES_PER_PAGE;
+	if ((ctl->lines_per_screen = ctl->lines_per_page - 1) < 1)
+		ctl->lines_per_screen = 1;
+	if (ctl->num_columns < 1)
+		ctl->num_columns = NUM_COLUMNS;
+	if ((ctl->d_scroll_len = (ctl->lines_per_page / 2) - 1) < 1)
+		ctl->d_scroll_len = 1;
 	prepare_line_buffer(ctl);
 }
-#endif				/* SIGWINCH */
 
 /* Read a command and do it.  A command consists of an optional integer
  * argument followed by the command character.  Return the number of
@@ -1800,7 +1806,6 @@ static void initterm(struct more_control *ctl)
 {
 	int ret;
 	char *term;
-	struct winsize win;
 	const char *cursorm;
 
 #ifndef NON_INTERACTIVE_MORE
@@ -1830,21 +1835,9 @@ static void initterm(struct more_control *ctl)
 		ctl->ul_opt = 0;
 		return;
 	}
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) < 0) {
-		ctl->lines_per_page = tigetnum(TERM_LINES);
-		ctl->num_columns = tigetnum(TERM_COLS);
-	} else {
-		if ((ctl->lines_per_page = win.ws_row) == 0)
-			ctl->lines_per_page = tigetnum(TERM_LINES);
-		if ((ctl->num_columns = win.ws_col) == 0)
-			ctl->num_columns = tigetnum(TERM_COLS);
-	}
-	if ((ctl->lines_per_page < 1) || tigetflag(TERM_HARD_COPY)) {
+	if (tigetflag(TERM_HARD_COPY))
 		ctl->hard_term = 1;
-		ctl->lines_per_page = LINES_PER_PAGE;
-	}
-	if (ctl->num_columns < 1)
-		ctl->num_columns = NUM_COLUMNS;
+	change_window_sz(ctl);
 	if (tigetflag(TERM_EAT_NEW_LINE))
 		/* Eat newline at last column + 1; dec, concept */
 		ctl->eatnl = 1;
@@ -1962,11 +1955,6 @@ int main(int argc, char **argv)
 	ctl.magic = magic_open(MAGIC_MIME_ENCODING | MAGIC_SYMLINK);
 	magic_load(ctl.magic, NULL);
 #endif
-	prepare_line_buffer(&ctl);
-
-	ctl.d_scroll_len = ctl.lines_per_page / 2 - 1;
-	if (ctl.d_scroll_len <= 0)
-		ctl.d_scroll_len = 1;
 
 	if ((s = getenv("MORE")) != NULL)
 		argscan(&ctl, s);
@@ -2001,8 +1989,6 @@ int main(int argc, char **argv)
 		else
 			ctl.noscroll_opt = 1;
 	}
-	if (ctl.lines_per_screen == 0)
-		ctl.lines_per_screen = ctl.lines_per_page - 1;
 	if (1 < ctl.num_files)
 		ctl.print_names = 1;
 	if (!ctl.no_intty && ctl.num_files == 0)
