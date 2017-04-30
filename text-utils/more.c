@@ -49,6 +49,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <paths.h>
 #include <poll.h>
 #include <regex.h>
@@ -154,6 +155,7 @@ struct more_control {
 	char *go_home;			/* go to screen home position */
 	char *end_clear;		/* clear rest of screen */
 	int num_columns;		/* number of columns */
+	char *initre;			/* file beginning search string */
 	char *previousre;		/* previous search() buf[] item */
 	struct {
 		long row_num;		/* row number */
@@ -209,66 +211,89 @@ static void __attribute__((__noreturn__)) usage(FILE *out)
 	fputs(_("A file perusal filter for CRT viewing.\n"), out);
 
 	fputs(USAGE_OPTIONS, out);
-	fputs(_(" -d          display help instead of ringing bell\n"), out);
-	fputs(_(" -f          count logical rather than screen lines\n"), out);
-	fputs(_(" -l          suppress pause after form feed\n"), out);
-	fputs(_(" -c          do not scroll, display text and clean line ends\n"), out);
-	fputs(_(" -p          do not scroll, clean screen and display text\n"), out);
-	fputs(_(" -s          squeeze multiple blank lines into one\n"), out);
-	fputs(_(" -u          suppress underlining and bold\n"), out);
-	fputs(_(" -i          ignore case when searching\n"), out);
-	fputs(_(" -<number>   the number of lines per screenful\n"), out);
-	fputs(_(" -n <number> same as -<number>\n"), out);
-	fputs(_(" +<number>   display file beginning from line number\n"), out);
-	fputs(_(" +/<string>  display file beginning from search string match\n"), out);
-	fputs(_(" -V          display version information and exit\n"), out);
+	fputs(_(" -d, --silent          display help instead of ringing bell\n"), out);
+	fputs(_(" -f, --logical         count logical rather than screen lines\n"), out);
+	fputs(_(" -l, --no-pause        suppress pause after form feed\n"), out);
+	fputs(_(" -c, --print-over      do not scroll, display text and clean line ends\n"), out);
+	fputs(_(" -p, --clean-print     do not scroll, clean screen and display text\n"), out);
+	fputs(_(" -s, --squeeze         squeeze multiple blank lines into one\n"), out);
+	fputs(_(" -u, --plain           suppress underlining and bold\n"), out);
+	fputs(_(" -i, --ignore-case     ignore case when searching\n"), out);
+	fputs(_(" -n, --lines <number>  the number of lines per screenful\n"), out);
+	fputs(_(" -<number>             same as --lines\n"), out);
+	fputs(_(" +<number>             display file beginning from line number\n"), out);
+	fputs(_(" +/<pattern>           display file beginning from pattern match\n"), out);
+	fputs(USAGE_SEPARATOR, out);
+	fputs(USAGE_HELP, out);
+	fputs(USAGE_VERSION, out);
 	fprintf(out, USAGE_MAN_TAIL("more(1)"));
 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 /* command line argument parser */
-static void argscan(struct more_control *ctl, char *s)
+static void argscan(struct more_control *ctl, int as_argc, char **as_argv)
 {
-	int seen_num = 0;
+	int c, opt;
+	static const struct option longopts[] = {
+		{ "silent",      no_argument,       NULL, 'd' },
+		{ "logical",     no_argument,       NULL, 'f' },
+		{ "no-pause",    no_argument,       NULL, 'l' },
+		{ "print-over",  no_argument,       NULL, 'c' },
+		{ "clean-print", no_argument,       NULL, 'p' },
+		{ "squeeze",     no_argument,       NULL, 's' },
+		{ "plain",       no_argument,       NULL, 'u' },
+		{ "ignore-case", no_argument,       NULL, 'i' },
+		{ "lines",       required_argument, NULL, 'n' },
+		{ "version",     no_argument,       NULL, 'V' },
+		{ "help",        no_argument,       NULL, 'h' },
+		{ NULL, 0, NULL, 0 }
+	};
 
-	while (*s != '\0') {
-		switch (*s) {
-		case '0':
-		case '1':
-		case '2':
-		case '3':
-		case '4':
-		case '5':
-		case '6':
-		case '7':
-		case '8':
-		case '9':
-			if (!seen_num) {
-				ctl->lines_per_screen = 0;
-				seen_num = 1;
+	/* Take care of number option and +args. */
+	for (opt = 0; opt < as_argc; opt++) {
+		int move = 0;
+
+		if (as_argv[opt][0] == '-' && isdigit(as_argv[opt][1])) {
+			ctl->lines_per_screen =
+			    strtos16_or_err(as_argv[opt], _("failed to parse number"));
+			ctl->lines_per_screen = abs(ctl->lines_per_screen);
+			move = 1;
+		} else if (as_argv[opt][0] == '+') {
+			if (isdigit(as_argv[opt][1])) {
+				ctl->jump_defined = 1;
+				ctl->jump_len = strtos32_or_err(as_argv[opt],
+				    _("failed to parse number")) - 1;
+				move = 1;
+			} else if (as_argv[opt][1] == '/') {
+				free(ctl->initre);
+				ctl->initre = xstrdup(as_argv[opt] + 2);
+				ctl->search_opt = 1;
+				move = 1;
 			}
-			ctl->lines_per_screen = ctl->lines_per_screen * 10 + *s - '0';
-			break;
-		case 'n':
-			ctl->num_files--;
-			if (!*++ctl->file_names)
-				errx(EXIT_FAILURE, "%s -- '%c'", _("option requires an argument"), 'n');
-			ctl->lines_per_screen = strtou16_or_err(*ctl->file_names, _("argument error"));
-			break;
+		}
+		if (move) {
+			as_argc--;
+			memmove(as_argv + opt, as_argv + opt + 1, sizeof(char *) * (as_argc - opt));
+			opt--;
+		}
+	}
+
+	while ((c = getopt_long(as_argc, as_argv, "dflcpsuin:eVh", longopts, NULL)) != -1) {
+		switch (c) {
 		case 'd':
 			ctl->no_bell = 1;
-			break;
-		case 'l':
-			ctl->stop_opt = 1;
 			break;
 		case 'f':
 			ctl->fold_opt = 1;
 			break;
-		case 'p':
-			ctl->noscroll_opt = 1;
+		case 'l':
+			ctl->stop_opt = 1;
 			break;
 		case 'c':
 			ctl->clreol_opt = 1;
+			break;
+		case 'p':
+			ctl->noscroll_opt = 1;
 			break;
 		case 's':
 			ctl->squeeze_opt = 1;
@@ -279,23 +304,50 @@ static void argscan(struct more_control *ctl, char *s)
 		case 'i':
 			ctl->ignore_case_opt = 1;
 			break;
-		case 'e':
+		case 'n':
+			ctl->lines_per_screen = strtou16_or_err(optarg, _("argument error"));
 			break;
-		case '-':
-		case ' ':
-		case '\t':
+		case 'e':	/* ignored silently to be posix compliant */
 			break;
 		case 'V':
 			printf(UTIL_LINUX_VERSION);
 			exit(EXIT_SUCCESS);
 			break;
+		case 'h':
+			usage(stdout);
 		default:
-			warnx(_("unknown option -%s"), s);
-			usage(stderr);
+			errtryhelp(EXIT_FAILURE);
 			break;
 		}
-		s++;
 	}
+	ctl->num_files = as_argc - optind;
+	ctl->file_names = as_argv + optind;
+}
+
+static void env_argscan(struct more_control *ctl, const char *s)
+{
+	char **env_argv;
+	int env_argc = 1;
+	int size = 8;
+	const char delim[] = { ' ', '\n', '\t', '\0' };
+	char *str = xstrdup(s);
+	char *key = NULL, *tok;
+
+	env_argv = xmalloc(sizeof(char *) * size);
+	env_argv[0] = _("MORE environment variable");	/* program name */
+	for (tok = strtok_r(str, delim, &key); tok; tok = strtok_r(NULL, delim, &key)) {
+		env_argv[env_argc++] = tok;
+		if (size < env_argc) {
+			size *= 2;
+			env_argv = xrealloc(env_argv, sizeof(char *) * size);
+		}
+	}
+
+	argscan(ctl, env_argc, env_argv);
+	/* Reset optind, command line parsing needs this.  */
+	optind = 0;
+	free(str);
+	free(env_argv);
 }
 
 #ifdef HAVE_MAGIC
@@ -754,6 +806,7 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 	erase_line(ctl);
 	reset_tty(ctl);
 	del_curterm(cur_term);
+	free(ctl->initre);
 	free(ctl->previousre);
 	free(ctl->linebuf);
 	free(ctl->go_home);
@@ -1876,7 +1929,7 @@ static void initterm(struct more_control *ctl)
 	ctl->end_clear = tigetstr(TERM_CLEAR_TO_SCREEN_END);
 }
 
-static void display_file(struct more_control *ctl, FILE *f, char *initbuf)
+static void display_file(struct more_control *ctl, FILE *f)
 {
 	ctl->context.line_num = ctl->context.row_num = 0;
 	ctl->current_line = 0;
@@ -1886,8 +1939,8 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf)
 		ctl->first_file = 0;
 		if (ctl->search_opt) {
 			free(ctl->previousre);
-			ctl->previousre = xstrdup(initbuf);
-			search(ctl, initbuf, f, 1);
+			ctl->previousre = xstrdup(ctl->initre);
+			search(ctl, ctl->initre, f, 1);
 		} else if (ctl->jump_defined)
 			skip_lines(ctl, f);
 	} else if (ctl->argv_position < ctl->num_files && !ctl->no_tty)
@@ -1923,9 +1976,7 @@ static void display_file(struct more_control *ctl, FILE *f, char *initbuf)
 int main(int argc, char **argv)
 {
 	FILE *f;
-	char *s;
-	int c;
-	char *initbuf = NULL;
+	const char *s;
 	sigset_t sigset;
 	struct more_control ctl = {
 		.first_file = 1,
@@ -1942,8 +1993,6 @@ int main(int argc, char **argv)
 	textdomain(PACKAGE);
 	atexit(close_stdout);
 
-	ctl.num_files = argc;
-	ctl.file_names = argv;
 	setlocale(LC_ALL, "");
 	initterm(&ctl);
 
@@ -1957,28 +2006,11 @@ int main(int argc, char **argv)
 #endif
 
 	if ((s = getenv("MORE")) != NULL)
-		argscan(&ctl, s);
+		env_argscan(&ctl, s);
 
 	/* Parse command line arguments */
-	while (0 < --ctl.num_files) {
-		if ((c = (*++ctl.file_names)[0]) == '-') {
-			argscan(&ctl, *ctl.file_names + 1);
-		} else if (c == '+') {
-			s = *ctl.file_names;
-			if (*++s == '/') {
-				ctl.search_opt = 1;
-				initbuf = xstrdup(s + 1);
-			} else {
-				ctl.jump_defined = 1;
-				for (ctl.jump_len = 0; *s != '\0'; s++)
-					if (isdigit(*s))
-						ctl.jump_len =
-						    ctl.jump_len * 10 + *s - '0';
-				ctl.jump_len--;
-			}
-		} else
-			break;
-	}
+	argscan(&ctl, argc, argv);
+
 	/* allow clreol only if go_home and eraseln and end_clear strings are
 	 * defined, and in that case, make sure we are in noscroll mode */
 	if (ctl.clreol_opt) {
@@ -2010,7 +2042,7 @@ int main(int argc, char **argv)
 			copy_file(stdin);
 		else {
 			f = stdin;
-			display_file(&ctl, f, initbuf);
+			display_file(&ctl, f);
 		}
 		ctl.first_file = 0;
 		ctl.no_intty = 0;
@@ -2019,7 +2051,7 @@ int main(int argc, char **argv)
 	for (/* nothing */; ctl.argv_position < ctl.num_files; ctl.argv_position++) {
 		if ((f = more_fopen(&ctl, ctl.file_names[ctl.argv_position])) == NULL)
 			continue;
-		display_file(&ctl, f, initbuf);
+		display_file(&ctl, f);
 		ctl.first_file = 0;
 	}
 	exit_more(&ctl);
