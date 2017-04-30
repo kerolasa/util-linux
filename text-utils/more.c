@@ -935,17 +935,13 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 						mblength =
 						    mbrtowc(&wc, buf + pos,
 							    sp - buf, &state);
-
-						state = (mblength == (size_t)-2
-							 || mblength ==
-							 (size_t)-1) ? state_bak
-						    : state;
-						mblength =
-						    (mblength == (size_t)-2
-						     || mblength == (size_t)-1
-						     || mblength ==
-						     0) ? 1 : mblength;
-
+						switch (mblength) {
+						case (size_t)-2:
+						case (size_t)-1:
+							state = state_bak;
+						case 0:
+							mblength = 1;
+						}
 						if (sp <= (buf + pos + mblength))
 							break;
 
@@ -1375,42 +1371,30 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 		line1 = ctl->file_pos;
 		read_line(ctl, file);
 		lncount++;
-		if (regexec(&re, ctl->linebuf, 0, NULL, 0) == 0) {
-			if (--n == 0) {
-				if ((1 < lncount && ctl->no_intty) || 3 < lncount) {
-					putchar('\n');
-					if (ctl->clreol_opt)
-						putp(ctl->eraseln);
-					fputs(_("...skipping\n"), stdout);
-				}
-				if (!ctl->no_intty) {
-					ctl->current_line -=
-					    (lncount < 3 ? lncount : 3);
-					more_fseek(ctl, file, line3);
-					if (ctl->noscroll_opt) {
-						if (ctl->clreol_opt) {
-							tputs(ctl->go_home,
-							      STDOUT_FILENO,
-							      putchar);
-							putp(ctl->eraseln);
-						} else
-							clear_tty(ctl);
-					}
-				} else {
-					erase_line(ctl);
-					if (ctl->noscroll_opt) {
-						if (ctl->clreol_opt) {
-							tputs(ctl->go_home,
-							      STDOUT_FILENO,
-							      putchar);
-							putp(ctl->eraseln);
-						} else
-							clear_tty(ctl);
-					}
-					puts(ctl->linebuf);
-				}
-				break;
+		if (regexec(&re, ctl->linebuf, 0, NULL, 0) == 0 && --n == 0) {
+			if ((1 < lncount && ctl->no_intty) || 3 < lncount) {
+				putchar('\n');
+				if (ctl->clreol_opt)
+					putp(ctl->eraseln);
+				fputs(_("...skipping\n"), stdout);
 			}
+			if (!ctl->no_intty) {
+				ctl->current_line -=
+				    (lncount < 3 ? lncount : 3);
+				more_fseek(ctl, file, line3);
+			} else
+				erase_line(ctl);
+			if (ctl->noscroll_opt) {
+				if (ctl->clreol_opt) {
+					tputs(ctl->go_home,
+					      STDOUT_FILENO, putchar);
+					puts(ctl->eraseln);
+				} else
+					clear_tty(ctl);
+			}
+			if (ctl->no_intty)
+				puts(ctl->linebuf);
+			break;
 		}
 	}
 	/* cancel alarm */
@@ -1477,9 +1461,10 @@ static void runtime_usage(void)
 static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filename)
 {
 	char *editor, *p;
-	int n = (ctl->current_line - ctl->lines_per_screen <= 0 ? 1 : ctl->current_line - (ctl->lines_per_screen + 1) / 2);
 	int split = 0;
+	int n = ctl->current_line - ctl->lines_per_screen;
 
+	n = n < 1 ? 1 : n + (ctl->lines_per_screen / 2);
 	editor = find_editor();
 	p = strrchr(editor, '/');
 	if (p)
