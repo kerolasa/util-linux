@@ -1831,13 +1831,34 @@ static void screen(struct more_control *ctl, FILE *f, int num_lines)
 }
 
 /* uninteractive file printout */
-static void copy_file(FILE *f)
+static void copy_file(struct more_control *ctl, FILE *f)
 {
 	char buf[BUFSIZ];
 	size_t sz;
 
-	while (0 < (sz = fread(&buf, sizeof(char), sizeof(buf), f)))
-		fwrite(&buf, sizeof(char), sz, stdout);
+	while (0 < (sz = fread(&buf, sizeof(char), sizeof(buf), f))) {
+		if (ctl->squeeze_opt) {
+			size_t i, squashed_sz = sz;
+			int nl = 0, here = 0;
+
+			for (i = 0; i < squashed_sz; i++) {
+				if (buf[i] == '\n') {
+					nl++;
+					if (nl == 3)
+						here = i;
+				} else if (nl != 0) {
+					nl = 0;
+					memmove(buf + here, buf + i, sz - i);
+					squashed_sz -= i - here;
+				}
+			}
+			/* true when buf ends with series of new lines */
+			if (nl != 0)
+				squashed_sz = here - 3;
+			fwrite(&buf, sizeof(char), squashed_sz, stdout);
+		} else
+			fwrite(&buf, sizeof(char), sz, stdout);
+	}
 }
 
 static void initterm(struct more_control *ctl)
@@ -1949,7 +1970,7 @@ static void display_file(struct more_control *ctl, FILE *f)
 	}
 	/* a file specific outputing happens here */
 	if (ctl->no_tty)
-		copy_file(f);
+		copy_file(ctl, f);
 	else
 		screen(ctl, f, ctl->lines_per_page - 1);
 	fflush(NULL);
@@ -2024,7 +2045,7 @@ int main(int argc, char **argv)
 	/* initializations are done, start displaying files one by one */
 	if (ctl.no_intty) {
 		if (ctl.no_tty)
-			copy_file(stdin);
+			copy_file(&ctl, stdin);
 		else {
 			f = stdin;
 			display_file(&ctl, f);
