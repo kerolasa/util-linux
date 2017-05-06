@@ -137,7 +137,6 @@ struct more_control {
 	int current_line;		/* line we are currently at */
 	char **file_names;		/* the list of file names */
 	int num_files;			/* number of files left to process */
-	char *shell;			/* the name of the shell to use */
 	int sigfd;			/* signalfd() file descriptor */
 	char *linebuf;			/* line buffer */
 	size_t linesz;			/* size of line buffer */
@@ -1184,6 +1183,7 @@ err:
 static void do_shell(struct more_control *ctl, char *filename)
 {
 	char cmdbuf[COMMAND_BUF];
+	char *shell;
 
 	erase_line(ctl);
 	putchar('!');
@@ -1197,7 +1197,10 @@ static void do_shell(struct more_control *ctl, char *filename)
 	fputc('\n', stderr);
 	fflush(NULL);
 	ctl->promptlen = 0;
-	execute(ctl, filename, ctl->shell, ctl->shell, "-c", ctl->shell_line, 0);
+	shell = getenv("SHELL");
+	if (shell == NULL || *shell == '\0')
+		shell = _PATH_BSHELL;
+	execute(ctl, filename, shell, shell, "-c", ctl->shell_line, 0);
 }
 
 /* Execute a colon-prefixed command.  Returns <0 if not a command that
@@ -1869,8 +1872,6 @@ static void initterm(struct more_control *ctl)
 		ctl->dumb = 1;
 		ctl->ul_opt = 0;
 	}
-	if ((ctl->shell = getenv("SHELL")) == NULL)
-		ctl->shell = _PATH_BSHELL;
 	setupterm(term, STDOUT_FILENO, &ret);
 	if (ret < 1) {
 		ctl->dumb = 1;
