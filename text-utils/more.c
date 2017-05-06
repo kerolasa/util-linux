@@ -96,7 +96,6 @@
 #define LINES_PER_PAGE	24
 #define NUM_COLUMNS	80
 #define INIT_BUF	80
-#define SHELL_LINE	1000
 #define COMMAND_BUF	200
 #define REGERR_BUF	NUM_COLUMNS
 #define SEARCH_TIMEOUT	10
@@ -139,7 +138,6 @@ struct more_control {
 	char **file_names;		/* the list of file names */
 	int num_files;			/* number of files left to process */
 	char *shell;			/* the name of the shell to use */
-	int shellp;			/* does previous shell command exists */
 	int sigfd;			/* signalfd() file descriptor */
 	char *linebuf;			/* line buffer */
 	size_t linesz;			/* size of line buffer */
@@ -165,7 +163,7 @@ struct more_control {
 	int lastcmd;			/* previous more key command */
 	int lastarg;			/* previous key command argument */
 	int lastcolon;			/* is a colon-prefixed key command */
-	char shell_line[SHELL_LINE];
+	char *shell_line;
 #ifdef HAVE_MAGIC
 	magic_t magic;			/* libmagic data load */
 #endif
@@ -810,6 +808,7 @@ static void __attribute__((__noreturn__)) exit_more(struct more_control *ctl)
 	free(ctl->previousre);
 	free(ctl->linebuf);
 	free(ctl->go_home);
+	free(ctl->shell_line);
 	exit(EXIT_SUCCESS);
 }
 
@@ -1021,21 +1020,23 @@ static void ttyin(struct more_control *ctl, char buf[], int nmax, char pchar)
 		more_error(ctl, _("Line too long"));
 }
 
-static int command_expansion(struct more_control *ctl, char **outbuf, char *inbuf)
+static void command_expansion(struct more_control *ctl, char *inbuf)
 {
 	char *inpstr = inbuf;
 	char *allocation;
 	char *outstr;
 	char c;
-	int changed = 0;
 	size_t xtra;
 	ptrdiff_t offset;
 
 	if (!strpbrk(inbuf, "%!\\")) {
-		*outbuf = xstrdup(inbuf);
-		return 0;
+		free(ctl->shell_line);
+		ctl->shell_line = xstrdup(inbuf);
+		return;
 	}
-	xtra = strlen(ctl->file_names[ctl->argv_position]) + strlen(ctl->shell_line) + COMMAND_BUF + 1;
+	xtra = strlen(ctl->file_names[ctl->argv_position]) + COMMAND_BUF + 1;
+	if (ctl->shell_line)
+		xtra += strlen(ctl->shell_line);
 	outstr = allocation = xmalloc(xtra);
 	while ((c = *inpstr++) != '\0') {
 		offset = outstr - allocation;
@@ -1050,18 +1051,18 @@ static int command_expansion(struct more_control *ctl, char **outbuf, char *inbu
 			if (!ctl->no_intty) {
 				strcpy(outstr, ctl->file_names[ctl->argv_position]);
 				outstr += strlen(ctl->file_names[ctl->argv_position]);
-				changed = 1;
 			} else
 				*outstr++ = c;
 			break;
 		case '!':
 			/* previous command */
-			if (!ctl->shellp)
+			if (!ctl->shell_line) {
 				more_error(ctl, _
 					   ("No previous command to substitute for"));
+				break;
+			}
 			strcpy(outstr, ctl->shell_line);
 			outstr += strlen(ctl->shell_line);
-			changed = 1;
 			break;
 		case '\\':
 			/* do not expand next % or ! char */
@@ -1073,9 +1074,10 @@ static int command_expansion(struct more_control *ctl, char **outbuf, char *inbu
 			*outstr++ = c;
 		}
 	}
-	*outstr++ = '\0';
-	*outbuf = allocation;
-	return changed;
+	*outstr = '\0';
+	free(ctl->shell_line);
+	ctl->shell_line = allocation;
+	return;
 }
 
 static void set_tty(struct more_control *ctl)
@@ -1182,38 +1184,19 @@ err:
 static void do_shell(struct more_control *ctl, char *filename)
 {
 	char cmdbuf[COMMAND_BUF];
-	int rc;
-	char *expanded = NULL;
 
 	erase_line(ctl);
 	putchar('!');
 	fflush(stdout);
-	ctl->promptlen = 1;
-	if (ctl->rerun_command)
+	if (ctl->rerun_command && ctl->shell_line)
 		fputs(ctl->shell_line, stdout);
 	else {
 		ttyin(ctl, cmdbuf, sizeof(cmdbuf) - 2, '!');
-		rc = command_expansion(ctl, &expanded, cmdbuf);
-		if (expanded) {
-			if (strlen(expanded) < (sizeof(ctl->shell_line) - 1))
-				xstrncpy(ctl->shell_line, expanded, sizeof ctl->shell_line);
-			else
-				rc = -1;
-			free(expanded);
-		}
-		if (rc < 0) {
-			fputs(_("  Overflow\n"), stderr);
-			output_prompt(ctl, filename);
-			return;
-		} else if (0 < rc) {
-			erase_line(ctl);
-			ctl->promptlen = printf("!%s", ctl->shell_line);
-		}
+		command_expansion(ctl, cmdbuf);
 	}
 	fputc('\n', stderr);
 	fflush(NULL);
 	ctl->promptlen = 0;
-	ctl->shellp = 1;
 	execute(ctl, filename, ctl->shell, ctl->shell, "-c", ctl->shell_line, 0);
 }
 
