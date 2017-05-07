@@ -98,7 +98,6 @@
 #define INIT_BUF	80
 #define COMMAND_BUF	200
 #define REGERR_BUF	NUM_COLUMNS
-#define SEARCH_TIMEOUT	10
 
 #define TERM_AUTO_RIGHT_MARGIN    "am"
 #define TERM_CEOL                 "xhp"
@@ -137,6 +136,7 @@ struct more_control {
 	int current_line;		/* line we are currently at */
 	char **file_names;		/* the list of file names */
 	int num_files;			/* number of files left to process */
+	sigset_t sigset;		/* signal operations */
 	int sigfd;			/* signalfd() file descriptor */
 	char *linebuf;			/* line buffer */
 	size_t linesz;			/* size of line buffer */
@@ -1304,25 +1304,11 @@ static void read_line(struct more_control *ctl, FILE *f)
 	*p = '\0';
 }
 
-/* search timeout boolean */
-volatile sig_atomic_t alarm_received;
+volatile sig_atomic_t stop_searching;
 
-static void sig_alarm_handler(int sig __attribute__((__unused__)))
+static void search_sig_handler(int sig __attribute__((__unused__)))
 {
-	alarm_received = 1;
-}
-
-static int stop_search(struct more_control *ctl)
-{
-	char buf[2];
-
-	ctl->promptlen = printf(_("No search results in %d seconds, stop searching?"), SEARCH_TIMEOUT);
-	buf[0] = getchar();
-	buf[1] = '\0';
-	erase_line(ctl);
-	alarm(SEARCH_TIMEOUT);
-	alarm_received = 0;
-	return rpmatch(buf);
+	stop_searching = 1;
 }
 
 /* Search for nth occurrence of regular expression contained in buf in
@@ -1350,14 +1336,13 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 		more_error(ctl, s);
 		return;
 	}
-	/* alarm() is used to avoid infinite long searches.  the given 10
-	 * seconds should, even with slow IO, provide quite significant
-	 * search coverage  */
-	alarm_received = 0;
-	signal(SIGALRM, sig_alarm_handler);
-	alarm(SEARCH_TIMEOUT);
+	/* Move ctrl+c signal handling during time of regexec() to be
+	 * handled locallly instead of signalfd in command() function.  */
+	sigdelset(&ctl->sigset, SIGINT);
+	sigprocmask(SIG_BLOCK, &ctl->sigset, NULL);
+	signal(SIGINT, search_sig_handler);
 	while (!feof(file)) {
-		if (alarm_received && (stop_search(ctl) == RPMATCH_YES))
+		if (stop_searching)
 			break;
 		line3 = line2;
 		line2 = line1;
@@ -1390,9 +1375,10 @@ static void search(struct more_control *ctl, char buf[], FILE *file, int n)
 			break;
 		}
 	}
-	/* cancel alarm */
-	alarm(0);
-	signal(SIGALRM, SIG_DFL);
+	/* Move signal handling back to command(). */
+	signal(SIGINT, SIG_DFL);
+	sigaddset(&ctl->sigset, SIGINT);
+	sigprocmask(SIG_BLOCK, &ctl->sigset, NULL);
 	regfree(&re);
 	if (feof(file)) {
 		if (!ctl->no_intty) {
@@ -1972,7 +1958,6 @@ int main(int argc, char **argv)
 {
 	FILE *f;
 	const char *s;
-	sigset_t sigset;
 	struct more_control ctl = {
 		.first_file = 1,
 		.notell = 1,
@@ -2022,15 +2007,15 @@ int main(int argc, char **argv)
 		usage(stderr);
 	if (!ctl.no_tty)
 		tcsetattr(STDERR_FILENO, TCSANOW, &ctl.output_tty);
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGINT);
-	sigaddset(&sigset, SIGQUIT);
-	sigaddset(&sigset, SIGTSTP);
+	sigemptyset(&ctl.sigset);
+	sigaddset(&ctl.sigset, SIGINT);
+	sigaddset(&ctl.sigset, SIGQUIT);
+	sigaddset(&ctl.sigset, SIGTSTP);
 #ifdef SIGWINCH
-	sigaddset(&sigset, SIGWINCH);
+	sigaddset(&ctl.sigset, SIGWINCH);
 #endif
-	sigprocmask(SIG_BLOCK, &sigset, NULL);
-	ctl.sigfd = signalfd(-1, &sigset, SFD_CLOEXEC);
+	sigprocmask(SIG_BLOCK, &ctl.sigset, NULL);
+	ctl.sigfd = signalfd(-1, &ctl.sigset, SFD_CLOEXEC);
 	/* initializations are done, start displaying files one by one */
 	if (ctl.no_intty) {
 		if (ctl.no_tty)
