@@ -94,7 +94,6 @@
 #define ESC		'\033'
 #define LINES_PER_PAGE	24
 #define NUM_COLUMNS	80
-#define INIT_BUF	80
 #define COMMAND_BUF	200
 #define REGERR_BUF	NUM_COLUMNS
 
@@ -1433,9 +1432,9 @@ static void runtime_usage(void)
 	print_separator('-', 79);
 }
 
-static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filename)
+static void execute_editor(struct more_control *ctl, char *filename)
 {
-	char *editor, *p;
+	char cmdbuf[32], *editor, *p;
 	int split = 0;
 	int n = ctl->current_line - ctl->lines_per_screen;
 
@@ -1449,14 +1448,14 @@ static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filenam
 	/* Earlier: call vi +n file.  This also works for emacs.  POSIX:
 	 * call vi -c n file (when editor is vi or ex).  */
 	if (!strcmp(p, "vi") || !strcmp(p, "ex")) {
-		sprintf(cmdbuf, "-c %d", n);
+		snprintf(cmdbuf, sizeof(cmdbuf), "-c %d", n);
 		split = 1;
 	} else
-		sprintf(cmdbuf, "+%d", n);
+		snprintf(cmdbuf, sizeof(cmdbuf), "+%d", n);
 	erase_line(ctl);
-	printf("%s %s %s", editor, cmdbuf, ctl->file_names[ctl->argv_position]);
+	printf("%s %s %s\n", editor, cmdbuf, ctl->file_names[ctl->argv_position]);
 	if (split) {
-		cmdbuf[2] = 0;
+		cmdbuf[2] = '\0';
 		execute(ctl, filename, editor, editor,
 			cmdbuf, cmdbuf + 3, ctl->file_names[ctl->argv_position], (char *)0);
 	} else
@@ -1530,7 +1529,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 	int retval = 0;
 	char colonch;
 	int done = 0;
-	char comchar, cmdbuf[INIT_BUF];
+	char comchar;
 	struct pollfd pfd[2];
 
 	/* setup file handles to wait input instructions or signals  */
@@ -1695,6 +1694,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 				fputc('\r', stderr);
 				search(ctl, ctl->previousre, f, nlines);
 			} else {
+				char cmdbuf[80];
 				ttyin(ctl, cmdbuf, sizeof(cmdbuf) - 2, '/');
 				fputc('\r', stderr);
 				free(ctl->previousre);
@@ -1717,7 +1717,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case 'v':	/* This case should go right before default */
 			if (!ctl->no_intty) {
-				execute_editor(ctl, cmdbuf, filename);
+				execute_editor(ctl, filename);
 				break;
 			}
 			/* fall through */
