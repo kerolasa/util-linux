@@ -1872,7 +1872,6 @@ static void initterm(struct more_control *ctl)
 	}
 	if (tigetflag(TERM_HARD_COPY))
 		ctl->hard_term = 1;
-	change_window_sz(ctl);
 	if (tigetflag(TERM_EAT_NEW_LINE))
 		/* Eat newline at last column + 1; dec, concept */
 		ctl->eatnl = 1;
@@ -1975,6 +1974,7 @@ int main(int argc, char **argv)
 
 	setlocale(LC_ALL, "");
 	initterm(&ctl);
+	change_window_sz(&ctl);
 
 	/* Auto set no scroll on when binary is called page */
 	if (!(strcmp(program_invocation_short_name, "page")))
