@@ -92,7 +92,6 @@
 
 #define LINSIZ		256	/* minimal Line buffer size */
 #define ESC		'\033'
-#define SCROLL_LEN	11
 #define LINES_PER_PAGE	24
 #define NUM_COLUMNS	80
 #define INIT_BUF	80
@@ -129,7 +128,6 @@ struct more_control {
 	off_t file_pos;			/* file position */
 	off_t file_size;		/* file size */
 	int argv_position;		/* position in argv[] */
-	int d_scroll_len;		/* number of lines scrolled by 'd' */
 	int lines_per_screen;		/* screen size in lines */
 	int promptlen;			/* message prompt length */
 	int jump_len;			/* line number to jump */
@@ -140,7 +138,6 @@ struct more_control {
 	int sigfd;			/* signalfd() file descriptor */
 	char *linebuf;			/* line buffer */
 	size_t linesz;			/* size of line buffer */
-	int lines_per_page;		/* lines per page */
 	char *clear;			/* clear screen */
 	char *eraseln;			/* erase line */
 	char *std_enter;		/* enter standout mode */
@@ -1416,7 +1413,7 @@ static void runtime_usage(void)
 	fputs(_("<space>         display next k lines of text [current screen size]\n"), stdout);
 	fputs(_("z               display next k lines of text [current screen size]*\n"), stdout);
 	fputs(_("<return>        display next k lines of text [1]*\n"), stdout);
-	fputs(_("d or ctrl-D     scroll k lines [current scroll size, initially 11]*\n"), stdout);
+	fputs(_("d or ctrl-D     scroll k lines [current scroll size, initially half screen]*\n"), stdout);
 	fputs(_("q, Q or ctrl-C  exit from more\n"), stdout);
 	fputs(_("s               skip forward k lines of text [1]\n"), stdout);
 	fputs(_("f               skip forward k screenfuls of text [1]\n"), stdout);
@@ -1507,23 +1504,19 @@ static void change_window_sz(struct more_control *ctl)
 		struct winsize win;
 		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
 			if (win.ws_row != 0) {
-				ctl->lines_per_page = win.ws_row;
+				ctl->lines_per_screen = win.ws_row - 1;
 			}
 			if (win.ws_col != 0)
 				ctl->num_columns = win.ws_col;
 		} else {
-			ctl->lines_per_page = tigetnum(TERM_LINES);
+			ctl->lines_per_screen = tigetnum(TERM_LINES) - 1;
 			ctl->num_columns = tigetnum(TERM_COLS);
 		}
 	}
-	if (ctl->lines_per_page < 1)
-		ctl->lines_per_page = LINES_PER_PAGE;
-	if ((ctl->lines_per_screen = ctl->lines_per_page - 1) < 1)
-		ctl->lines_per_screen = 1;
+	if (ctl->lines_per_screen < 1)
+		ctl->lines_per_screen = LINES_PER_PAGE;
 	if (ctl->num_columns < 1)
 		ctl->num_columns = NUM_COLUMNS;
-	if ((ctl->d_scroll_len = (ctl->lines_per_page / 2) - 1) < 1)
-		ctl->d_scroll_len = 1;
 	prepare_line_buffer(ctl);
 }
 
@@ -1628,9 +1621,11 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			break;
 		case 'd':
 		case CTRL('D'):
-			if (nlines != 0)
-				ctl->d_scroll_len = nlines;
-			retval = ctl->d_scroll_len;
+			if (nlines == 0) {
+				if ((retval = ctl->lines_per_screen / 2) < 1)
+					retval = 1;
+			} else
+				retval = nlines;
 			done = 1;
 			break;
 		case 'q':
@@ -1946,7 +1941,7 @@ static void display_file(struct more_control *ctl, FILE *f)
 	if (ctl->no_tty)
 		copy_file(ctl, f);
 	else
-		screen(ctl, f, ctl->lines_per_page - 1);
+		screen(ctl, f, ctl->lines_per_screen);
 	fflush(NULL);
 	fclose(f);
 	ctl->screen_start.line_num = ctl->screen_start.row_num = 0L;
@@ -1961,9 +1956,8 @@ int main(int argc, char **argv)
 		.first_file = 1,
 		.notell = 1,
 		.wrap_margin = 1,
-		.lines_per_page = LINES_PER_PAGE,
+		.lines_per_screen = LINES_PER_PAGE,
 		.num_columns = NUM_COLUMNS,
-		.d_scroll_len = SCROLL_LEN,
 		0
 	};
 
