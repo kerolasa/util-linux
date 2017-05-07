@@ -1111,6 +1111,13 @@ static void free_args(char ***args)
 	free(*args);
 }
 
+static void print_separator(const int c, int i)
+{
+	while (i--)
+		putchar(c);
+	putchar('\n');
+}
+
 /* this will execute '!command' or 'v' editor */
 static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 {
@@ -1174,7 +1181,7 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 	} else
 		fputs(_("can't fork\n"), stderr);
 	set_tty(ctl);
-	puts("------------------------");
+	print_separator('-', 24);
 err:
 	output_prompt(ctl, filename);
 }
@@ -1416,8 +1423,7 @@ static char *find_editor(void)
 
 static void runtime_usage(void)
 {
-	const char separator[] = "-------------------------------------------------------------------------------\n";
-	fputs(separator, stdout);
+	print_separator('-', 79);
 	fputs(_("Most commands optionally preceded by integer argument k.  "
 		"Defaults in brackets.\n"
 		"Star (*) indicates argument becomes new default.\n"), stdout);
@@ -1441,7 +1447,7 @@ static void runtime_usage(void)
 	fputs(_(":p              go to kth previous file [1]\n"), stdout);
 	fputs(_(":f              display current file name and line number\n"), stdout);
 	fputs(_(".               repeat previous command\n"), stdout);
-	fputs(separator, stdout);
+	print_separator('-', 79);
 }
 
 static void execute_editor(struct more_control *ctl, char *cmdbuf, char *filename)
@@ -1944,13 +1950,12 @@ static void display_file(struct more_control *ctl, FILE *f)
 	}
 	/* file banner, printed when multiple files being displayed */
 	if (ctl->print_names) {
-		static const char separator[] = "::::::::::::::";
 		erase_line(ctl);
-		puts(separator);
+		print_separator(':', 14);
 		erase_line(ctl);
 		puts(ctl->file_names[ctl->argv_position]);
 		erase_line(ctl);
-		puts(separator);
+		print_separator(':', 14);
 	}
 	/* a file specific outputing happens here */
 	if (ctl->no_tty)
