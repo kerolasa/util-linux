@@ -1469,7 +1469,7 @@ static int skip_backwards(struct more_control *ctl, FILE *f, int nlines)
 	erase_line(ctl);
 	printf(P_("...back %d page", "...back %d pages", nlines), nlines);
 	putchar('\n');
-	ctl->jump_len = ctl->current_line - (ctl->lines_per_screen * (nlines + 1));
+	ctl->jump_len = ctl->current_line - (ctl->lines_per_screen * (nlines + 1)); // make not pages
 	if (!ctl->noscroll_opt)
 		ctl->jump_len--;
 	/* go to beginning of the file and jump to requested line */
@@ -1600,6 +1600,13 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			if (0 <= retval)
 				done++;
 			break;
+		case 'g':
+			nlines = ctl->current_line;
+		case 'k':
+			nlines = 1;
+		case 'u':
+		case CTRL('u'):
+			nlines = ctl->lines_per_screen / 2;
 		case 'b':
 		case CTRL('B'):
 			if (ctl->no_intty) {
@@ -1610,6 +1617,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			done = 1;
 			break;
 		case ' ':
+		case 'j':
 		case 'z':
 			if (nlines == 0)
 				nlines = ctl->lines_per_screen;
@@ -1630,6 +1638,10 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 		case 'q':
 		case 'Q':
 			exit_more(ctl);
+		case 'G':
+			// nlines = lastline; ???
+			skip_forwards(ctl, f, nlines, comchar);
+			break;
 		case 's':
 		case 'f':
 		case CTRL('F'):
@@ -1670,6 +1682,7 @@ static int command(struct more_control *ctl, char *filename, FILE *f)
 			}
 			fputc('\a', stderr);
 			break;
+		case CTRL('g'):
 		case '=':
 			erase_line(ctl);
 			ctl->promptlen = printf("%jd", (intmax_t) ctl->current_line);
