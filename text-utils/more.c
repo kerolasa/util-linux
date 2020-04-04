@@ -163,7 +163,6 @@ struct more_control {
 	off_t file_size;		/* file size */
 	int argv_position;		/* argv[] position */
 	int lines_per_screen;		/* screen size in lines */
-	int d_scroll_len;		/* number of lines scrolled by 'd' */
 	int prompt_len;			/* message prompt length */
 	int current_line;		/* line we are currently at */
 	int next_jump;			/* number of lines to skip ahead */
@@ -173,7 +172,6 @@ struct more_control {
 	sigset_t sigset;		/* signal operations */
 	char *line_buf;			/* line buffer */
 	size_t line_sz;			/* size of line_buf buffer */
-	int lines_per_page;		/* lines per page */
 	char *clear;			/* clear screen */
 	char *erase_line;		/* erase line */
 	char *enter_std;		/* enter standout mode */
@@ -1180,23 +1178,14 @@ static void sigwinch_handler(struct more_control *ctl)
 		struct winsize win;
 
 		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
-			if (win.ws_row != 0) {
-				ctl->lines_per_page = win.ws_row;
-				ctl->d_scroll_len = ctl->lines_per_page / 2 - 1;
-				if (ctl->d_scroll_len < 1)
-					ctl->d_scroll_len = 1;
-				ctl->lines_per_screen = ctl->lines_per_page - 1;
-			}
+			if (win.ws_row != 0)
+				ctl->lines_per_screen = win.ws_row - 1;
 			if (win.ws_col != 0)
 				ctl->num_columns = win.ws_col;
 		}
 	}
-	if (ctl->lines_per_page < 1)
-		ctl->lines_per_page = LINES_PER_PAGE;
-	if ((ctl->lines_per_screen = ctl->lines_per_page - 1) < 1)
-		ctl->lines_per_screen = 1;
-	if ((ctl->d_scroll_len = (ctl->lines_per_page / 2) - 1) < 1)
-		ctl->d_scroll_len = 1;
+	if (ctl->lines_per_screen < 1)
+		ctl->lines_per_screen = LINES_PER_PAGE - 1;
 	if (ctl->num_columns < 1)
 		ctl->num_columns = NUM_COLUMNS;
 	prepare_line_buffer(ctl);
@@ -1489,7 +1478,7 @@ static void runtime_usage(void)
 		("<space>                 Display next k lines of text [current screen size]\n"
 		 "z                       Display next k lines of text [current screen size]*\n"
 		 "<return>                Display next k lines of text [1]*\n"
-		 "d or ctrl-D             Scroll k lines [current scroll size, initially 11]*\n"
+		 "d or ctrl-D             Scroll k lines [default is half screen]*\n"
 		 "q or Q or <interrupt>   Exit from more\n"
 		 "s                       Skip forward k lines of text [1]\n"
 		 "f                       Skip forward k screenfuls of text [1]\n"
@@ -1636,9 +1625,9 @@ static int more_key_command(struct more_control *ctl, char *filename)
 			done = 1;
 			break;
 		case more_kc_set_scroll_len:
-			if (cmd.number != 0)
-				ctl->d_scroll_len = cmd.number;
-			retval = ctl->d_scroll_len;
+			retval = ctl->lines_per_screen / 2;
+			if (retval < 1)
+				retval = 1;
 			done = 1;
 			break;
 		case more_kc_quit:
@@ -1900,8 +1889,8 @@ static void display_file(struct more_control *ctl, int left)
 			if (ctl->clear_line_ends)
 				putp(ctl->erase_line);
 			print_separator(':', 14);
-			if (left > ctl->lines_per_page - 4)
-				left = ctl->lines_per_page - 4;
+			if (ctl->lines_per_screen - 3 < left)
+				left = ctl->lines_per_screen - 3;
 		}
 		if (ctl->no_tty_out)
 			copy_file(ctl->current_file);
@@ -1989,9 +1978,8 @@ int main(int argc, char **argv)
 		.first_file = 1,
 		.no_quit_dialog = 1,
 		.wrap_margin = 1,
-		.lines_per_page = LINES_PER_PAGE,
 		.num_columns = NUM_COLUMNS,
-		.d_scroll_len = SCROLL_LEN,
+		.lines_per_screen = LINES_PER_PAGE - 1,
 		0
 	};
 
@@ -2015,10 +2003,6 @@ int main(int argc, char **argv)
 	ctl.magic = magic_open(MAGIC_MIME_ENCODING | MAGIC_SYMLINK);
 	magic_load(ctl.magic, NULL);
 #endif
-	ctl.d_scroll_len = ctl.lines_per_page / 2 - 1;
-	if (ctl.d_scroll_len <= 0)
-		ctl.d_scroll_len = 1;
-
 	/* allow clear_line_ends only if go_home and erase_line and clear_rest strings are
 	 * defined, and in that case, make sure we are in no_scroll mode */
 	if (ctl.clear_line_ends) {
@@ -2029,8 +2013,6 @@ int main(int argc, char **argv)
 		else
 			ctl.no_scroll = 1;
 	}
-	if (ctl.lines_per_screen == 0)
-		ctl.lines_per_screen = ctl.lines_per_page - 1;
 	left = ctl.lines_per_screen;
 	if (ctl.num_files > 1)
 		ctl.print_banner = 1;
