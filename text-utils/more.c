@@ -1176,19 +1176,29 @@ static void sigcont_handler(struct more_control *ctl)
 /* Come here if a signal for a window size change is received */
 static void sigwinch_handler(struct more_control *ctl)
 {
-	struct winsize win;
+	if (!ctl->hard_tty) {
+		struct winsize win;
 
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
-		if (win.ws_row != 0) {
-			ctl->lines_per_page = win.ws_row;
-			ctl->d_scroll_len = ctl->lines_per_page / 2 - 1;
-			if (ctl->d_scroll_len < 1)
-				ctl->d_scroll_len = 1;
-			ctl->lines_per_screen = ctl->lines_per_page - 1;
+		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) != -1) {
+			if (win.ws_row != 0) {
+				ctl->lines_per_page = win.ws_row;
+				ctl->d_scroll_len = ctl->lines_per_page / 2 - 1;
+				if (ctl->d_scroll_len < 1)
+					ctl->d_scroll_len = 1;
+				ctl->lines_per_screen = ctl->lines_per_page - 1;
+			}
+			if (win.ws_col != 0)
+				ctl->num_columns = win.ws_col;
 		}
-		if (win.ws_col != 0)
-			ctl->num_columns = win.ws_col;
 	}
+	if (ctl->lines_per_page < 1)
+		ctl->lines_per_page = LINES_PER_PAGE;
+	if ((ctl->lines_per_screen = ctl->lines_per_page - 1) < 1)
+		ctl->lines_per_screen = 1;
+	if ((ctl->d_scroll_len = (ctl->lines_per_page / 2) - 1) < 1)
+		ctl->d_scroll_len = 1;
+	if (ctl->num_columns < 1)
+		ctl->num_columns = NUM_COLUMNS;
 	prepare_line_buffer(ctl);
 }
 
@@ -1909,7 +1919,6 @@ static void initterm(struct more_control *ctl)
 {
 	int ret;
 	char *term;
-	struct winsize win;
 	char *cursor_addr;
 
 #ifndef NON_INTERACTIVE_MORE
@@ -1935,19 +1944,10 @@ static void initterm(struct more_control *ctl)
 		ctl->dumb_tty = 1;
 		return;
 	}
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) < 0) {
-		ctl->lines_per_page = tigetnum(TERM_LINES);
-		ctl->num_columns = tigetnum(TERM_COLS);
-	} else {
-		if ((ctl->lines_per_page = win.ws_row) == 0)
-			ctl->lines_per_page = tigetnum(TERM_LINES);
-		if ((ctl->num_columns = win.ws_col) == 0)
-			ctl->num_columns = tigetnum(TERM_COLS);
-	}
-	if ((ctl->lines_per_page <= 0) || tigetflag(TERM_HARD_COPY)) {
+	if (tigetflag(TERM_HARD_COPY))
 		ctl->hard_tty = 1;
-		ctl->lines_per_page = LINES_PER_PAGE;
-	}
+	/* The SIGWINCH handler call will ensure output dimensions are ok */
+	sigwinch_handler(ctl);
 
 	if (tigetflag(TERM_EAT_NEW_LINE))
 		/* Eat newline at last column + 1; dec, concept */
@@ -2015,8 +2015,6 @@ int main(int argc, char **argv)
 	ctl.magic = magic_open(MAGIC_MIME_ENCODING | MAGIC_SYMLINK);
 	magic_load(ctl.magic, NULL);
 #endif
-	prepare_line_buffer(&ctl);
-
 	ctl.d_scroll_len = ctl.lines_per_page / 2 - 1;
 	if (ctl.d_scroll_len <= 0)
 		ctl.d_scroll_len = 1;
