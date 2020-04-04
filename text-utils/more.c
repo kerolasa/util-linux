@@ -169,7 +169,6 @@ struct more_control {
 	int next_jump;			/* number of lines to skip ahead */
 	char **file_names;		/* The list of file names */
 	int num_files;			/* Number of files left to process */
-	char *shell;			/* name of the shell to use */
 	int sigfd;			/* signalfd() file descriptor */
 	sigset_t sigset;		/* signal operations */
 	char *line_buf;			/* line buffer */
@@ -1261,6 +1260,7 @@ static void execute(struct more_control *ctl, char *filename, char *cmd, ...)
 static void run_shell(struct more_control *ctl, char *filename)
 {
 	char cmdbuf[COMMAND_BUF];
+	char *shell;
 
 	erase_to_col(ctl, 0);
 	putchar('!');
@@ -1279,7 +1279,10 @@ static void run_shell(struct more_control *ctl, char *filename)
 	fputc('\n', stderr);
 	fflush(NULL);
 	ctl->prompt_len = 0;
-	execute(ctl, filename, ctl->shell, ctl->shell, "-c", ctl->shell_line, 0);
+	shell = getenv("SHELL");
+	if (shell == NULL || *shell == '\0')
+		shell = _PATH_BSHELL;
+	execute(ctl, filename, shell, shell, "-c", ctl->shell_line, 0);
 }
 
 /* Skip n lines in the file f */
@@ -1976,9 +1979,6 @@ static void initterm(struct more_control *ctl)
 	ctl->clear_rest = tigetstr(TERM_CLEAR_TO_SCREEN_END);
 	if ((ctl->backspace_ch = tigetstr(TERM_BACKSPACE)) == NULL)
 		ctl->backspace_ch = BACKSPACE;
-
-	if ((ctl->shell = getenv("SHELL")) == NULL)
-		ctl->shell = _PATH_BSHELL;
 }
 
 int main(int argc, char **argv)
