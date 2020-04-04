@@ -1839,15 +1839,30 @@ static void screen(struct more_control *ctl, int num_lines)
 	}
 }
 
-static void copy_file(FILE *f)
+static void copy_file(struct more_control *ctl, FILE *f)
 {
 	char buf[BUFSIZ];
 	size_t sz;
 
-	while ((sz = fread(&buf, sizeof(char), sizeof(buf), f)) > 0)
-		fwrite(&buf, sizeof(char), sz, stdout);
-}
+	if (ctl->squeeze_spaces) {
+		size_t i, nl = 0;
 
+		while (0 < (sz = fread(&buf, sizeof(char), sizeof(buf), f))) {
+			for (i = 0; i < sz; i++) {
+				if (buf[i] == '\n')
+					nl++;
+				else
+					nl = 0;
+				if (2 < nl)
+					continue;
+				putchar(buf[i]);
+			}
+		}
+	} else {
+		while ((sz = fread(&buf, sizeof(char), sizeof(buf), f)) > 0)
+			fwrite(&buf, sizeof(char), sz, stdout);
+	}
+}
 
 static void display_file(struct more_control *ctl, int left)
 {
@@ -1893,7 +1908,7 @@ static void display_file(struct more_control *ctl, int left)
 				left = ctl->lines_per_screen - 3;
 		}
 		if (ctl->no_tty_out)
-			copy_file(ctl->current_file);
+			copy_file(ctl, ctl->current_file);
 		else
 			screen(ctl, left);
 	}
@@ -2037,7 +2052,7 @@ int main(int argc, char **argv)
 	ctl.sigfd = signalfd(-1, &ctl.sigset, SFD_CLOEXEC);
 	if (ctl.no_tty_in) {
 		if (ctl.no_tty_out)
-			copy_file(stdin);
+			copy_file(&ctl, stdin);
 		else {
 			ctl.current_file = stdin;
 			display_file(&ctl, left);
