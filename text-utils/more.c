@@ -132,6 +132,7 @@ typedef enum {
 	more_kc_colon,
 	more_kc_repeat_previous,
 	more_kc_backwards,
+	more_kc_beginning,
 	more_kc_jump_lines_per_screen,
 	more_kc_set_lines_per_screen,
 	more_kc_set_scroll_len,
@@ -846,11 +847,23 @@ static struct number_command read_command(struct more_control *ctl)
 		case ':':
 			ctl->leading_colon = 1;
 			break;
+		case 'k':
+			/* FIXME cmd.key = more_kc_backwards_line; */
+			break;
 		case 'b':
 		case CTRL('B'):
+		case 'u':
+		case CTRL('u'):
 			cmd.key = more_kc_backwards;
 			break;
+		case 'g':
+			cmd.key = more_kc_beginning;
+			break;
+		case 'G':
+			/* FIXME cmd.key = more_kc_jump_last_line; */
+			break;
 		case ' ':
+		case 'j':
 			cmd.key = more_kc_jump_lines_per_screen;
 			break;
 		case 'z':
@@ -873,12 +886,15 @@ static struct number_command read_command(struct more_control *ctl)
 			cmd.key = more_kc_next_line;
 			break;
 		case '\f':
+		case 'r':
+		case 'R':
 			cmd.key = more_kc_clear_screen;
 			break;
 		case '\'':
 			cmd.key = more_kc_previous_search_match;
 			break;
 		case '=':
+		case CTRL('g'):
 			cmd.key = more_kc_display_line;
 			break;
 		case 'n':
@@ -1613,6 +1629,13 @@ static int more_key_command(struct more_control *ctl, char *filename)
 				return -1;
 			}
 			retval = skip_backwards(ctl, cmd.number);
+			done = 1;
+			break;
+		case more_kc_beginning:
+			more_fseek(ctl, 0);
+		        ctl->current_line = 0;
+		        ctl->next_jump = 0;
+		        retval = ctl->lines_per_screen;
 			done = 1;
 			break;
 		case more_kc_jump_lines_per_screen:
